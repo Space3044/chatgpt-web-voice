@@ -325,6 +325,40 @@ func (p *Pool) Upsert(account Account) error {
 	}
 }
 
+// PickByID selects one enabled account by database id. Used to resume a local
+// conversation against the same pool account that created the upstream thread.
+// Returns Error when the account is missing, disabled, or in the excluded set.
+func (p *Pool) PickByID(id int64, excluded map[string]struct{}) (string, Account, error) {
+	if id <= 0 {
+		return "", Account{}, &Error{Message: "account id is required"}
+	}
+	p.db.Lock()
+	defer p.db.Unlock()
+	if excluded == nil {
+		excluded = map[string]struct{}{}
+	}
+	account, err := p.getUnlocked(id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return "", Account{}, &Error{Message: "preferred account is unavailable"}
+		}
+		return "", Account{}, err
+	}
+	if account.Disabled || account.Status == "禁用" {
+		return "", Account{}, &Error{Message: "preferred account is unavailable"}
+	}
+	if _, skip := excluded[account.AccessToken]; skip {
+		return "", Account{}, &Error{Message: "preferred account is unavailable"}
+	}
+	if _, err := p.db.Conn().Exec(
+		`UPDATE accounts SET last_used_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		account.ID,
+	); err != nil {
+		return "", Account{}, fmt.Errorf("mark account used: %w", err)
+	}
+	return account.AccessToken, account, nil
+}
+
 // Pick selects an enabled account, preferring the least recently used one.
 // A preferred token is only accepted when it already exists in this database;
 // callers cannot inject arbitrary upstream credentials.

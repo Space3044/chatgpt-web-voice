@@ -38,10 +38,39 @@ func (db *DB) migrate() error {
 			owner TEXT NOT NULL,
 			title TEXT NOT NULL DEFAULT '',
 			preview TEXT NOT NULL DEFAULT '',
+			account_id INTEGER NOT NULL DEFAULT 0,
+			upstream_conversation_id TEXT NOT NULL DEFAULT '',
+			upstream_parent_message_id TEXT NOT NULL DEFAULT '',
+			upstream_voice_session_id TEXT NOT NULL DEFAULT '',
+			gateway_voice_session_id TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		"CREATE INDEX IF NOT EXISTS idx_conversations_owner_updated ON conversations(owner, updated_at DESC, id DESC)",
+		// call_sessions: gateway voice-session metadata only (no chat content).
+		// Used for admin visibility and sticky account resume after restarts.
+		`CREATE TABLE IF NOT EXISTS call_sessions (
+			voice_session_id TEXT PRIMARY KEY,
+			owner TEXT NOT NULL,
+			caller_kind TEXT NOT NULL DEFAULT '',
+			caller_label TEXT NOT NULL DEFAULT '',
+			api_key_id INTEGER NOT NULL DEFAULT 0,
+			account_id INTEGER NOT NULL DEFAULT 0,
+			upstream_conversation_id TEXT NOT NULL DEFAULT '',
+			upstream_parent_message_id TEXT NOT NULL DEFAULT '',
+			upstream_voice_session_id TEXT NOT NULL DEFAULT '',
+			voice TEXT NOT NULL DEFAULT '',
+			voice_mode TEXT NOT NULL DEFAULT '',
+			language_code TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'active',
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			released_at TEXT NOT NULL DEFAULT ''
+		)`,
+		"CREATE INDEX IF NOT EXISTS idx_call_sessions_updated ON call_sessions(updated_at DESC, voice_session_id DESC)",
+		"CREATE INDEX IF NOT EXISTS idx_call_sessions_owner ON call_sessions(owner, updated_at DESC)",
+		"CREATE INDEX IF NOT EXISTS idx_call_sessions_account ON call_sessions(account_id, updated_at DESC)",
 		`CREATE TABLE IF NOT EXISTS conversation_messages (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
@@ -66,6 +95,48 @@ func (db *DB) migrate() error {
 	// access_token is now sealed ciphertext; uniqueness is enforced on token_hash.
 	if err := db.ensureAccountsTokenHash(); err != nil {
 		return err
+	}
+	if err := db.ensureConversationUpstreamColumns(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureConversationUpstreamColumns adds optional chatgpt.com continuity
+// fields to conversations for existing deployments created before resume support.
+func (db *DB) ensureConversationUpstreamColumns() error {
+	for _, column := range []string{
+		"upstream_conversation_id",
+		"upstream_parent_message_id",
+		"upstream_voice_session_id",
+		"gateway_voice_session_id",
+	} {
+		has, err := db.hasColumn("conversations", column)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		statement := fmt.Sprintf(
+			`ALTER TABLE conversations ADD COLUMN %s TEXT NOT NULL DEFAULT ''`,
+			column,
+		)
+		if _, err := db.conn.Exec(statement); err != nil {
+			return fmt.Errorf("add conversations.%s: %w", column, err)
+		}
+	}
+	// Sticky pool account for upstream resume. 0 means "not bound yet".
+	hasAccount, err := db.hasColumn("conversations", "account_id")
+	if err != nil {
+		return err
+	}
+	if !hasAccount {
+		if _, err := db.conn.Exec(
+			`ALTER TABLE conversations ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0`,
+		); err != nil {
+			return fmt.Errorf("add conversations.account_id: %w", err)
+		}
 	}
 	return nil
 }

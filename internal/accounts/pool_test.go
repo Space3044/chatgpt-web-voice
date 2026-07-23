@@ -48,6 +48,34 @@ func TestPickRejectsPreferredOutsideDatabase(t *testing.T) {
 	}
 }
 
+func TestPickByIDUsesStickyAccount(t *testing.T) {
+	pool := newTestPool(t)
+	first, err := pool.Create(Account{Email: "a@x.com", AccessToken: "token-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := pool.Create(Account{Email: "b@x.com", AccessToken: "token-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, account, err := pool.PickByID(second.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "token-b" || account.ID != second.ID {
+		t.Fatalf("expected sticky second account, got token=%q account=%+v", token, account)
+	}
+	if _, err := pool.Update(first.ID, AccountUpdate{Email: first.Email, Disabled: true, Status: "禁用"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := pool.PickByID(first.ID, nil); err == nil {
+		t.Fatal("expected disabled sticky account to fail")
+	}
+	if _, _, err := pool.PickByID(99999, nil); err == nil {
+		t.Fatal("expected missing sticky account to fail")
+	}
+}
+
 func TestPickSkipsDisabledAndRotatesAccounts(t *testing.T) {
 	pool := newTestPool(t)
 	for _, account := range []Account{

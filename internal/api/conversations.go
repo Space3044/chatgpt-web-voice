@@ -18,7 +18,12 @@ type createConversationRequest struct {
 }
 
 type updateConversationRequest struct {
-	Title string `json:"title"`
+	Title                   string  `json:"title"`
+	AccountID               *int64  `json:"account_id"`
+	UpstreamConversationID  *string `json:"upstream_conversation_id"`
+	UpstreamParentMessageID *string `json:"upstream_parent_message_id"`
+	UpstreamVoiceSessionID  *string `json:"upstream_voice_session_id"`
+	GatewayVoiceSessionID   *string `json:"gateway_voice_session_id"`
 }
 
 type conversationMessageRequest struct {
@@ -86,12 +91,52 @@ func (s *Server) updateConversation(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": map[string]any{"error": err.Error()}})
 		return
 	}
-	conversation, err := s.conversations.UpdateTitle(requestOwner(r), id, request.Title)
+	owner := requestOwner(r)
+	hasUpstream := request.AccountID != nil ||
+		request.UpstreamConversationID != nil ||
+		request.UpstreamParentMessageID != nil ||
+		request.UpstreamVoiceSessionID != nil ||
+		request.GatewayVoiceSessionID != nil
+	title := strings.TrimSpace(request.Title)
+
+	var conversation conversations.Conversation
+	switch {
+	case title != "" && hasUpstream:
+		if conversation, err = s.conversations.UpdateTitle(owner, id, title); err != nil {
+			writeConversationError(w, r, err)
+			return
+		}
+		conversation, err = s.conversations.UpdateUpstreamContext(owner, id, conversations.UpstreamContextUpdate{
+			AccountID:               request.AccountID,
+			UpstreamConversationID:  request.UpstreamConversationID,
+			UpstreamParentMessageID: request.UpstreamParentMessageID,
+			UpstreamVoiceSessionID:  request.UpstreamVoiceSessionID,
+			GatewayVoiceSessionID:   request.GatewayVoiceSessionID,
+		})
+	case title != "":
+		conversation, err = s.conversations.UpdateTitle(owner, id, title)
+	case hasUpstream:
+		conversation, err = s.conversations.UpdateUpstreamContext(owner, id, conversations.UpstreamContextUpdate{
+			AccountID:               request.AccountID,
+			UpstreamConversationID:  request.UpstreamConversationID,
+			UpstreamParentMessageID: request.UpstreamParentMessageID,
+			UpstreamVoiceSessionID:  request.UpstreamVoiceSessionID,
+			GatewayVoiceSessionID:   request.GatewayVoiceSessionID,
+		})
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"detail": map[string]any{"error": "title or upstream context is required"}})
+		return
+	}
 	if err != nil {
 		writeConversationError(w, r, err)
 		return
 	}
-	logging.FromContext(r.Context()).Info("conversation_renamed", "conversation_id", conversation.ID)
+	logging.FromContext(r.Context()).Info(
+		"conversation_updated",
+		"conversation_id", conversation.ID,
+		"account_id", conversation.AccountID,
+		"has_upstream_conversation", conversation.UpstreamConversationID != "",
+	)
 	writeJSON(w, http.StatusOK, map[string]any{"conversation": conversation})
 }
 

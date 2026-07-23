@@ -81,13 +81,16 @@ func TestNormalizeSDP(t *testing.T) {
 func TestVoiceSessionOwnership(t *testing.T) {
 	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
 	account := accounts.Account{ID: 7, DeviceID: "device", Proxy: "http://proxy.example:8080"}
-	id := svc.bindVoiceSession("api_key:1", "", "token", account)
+	id := svc.bindVoiceSession("api_key:1", "", "token", account, UpstreamContext{})
 	if id == "" {
 		t.Fatal("missing voice session ID")
 	}
 	owned, forbidden := svc.boundVoiceSession("api_key:1", id)
 	if forbidden || owned == nil || owned.AccountID != account.ID {
 		t.Fatalf("unexpected owned binding: binding=%+v forbidden=%v", owned, forbidden)
+	}
+	if owned.UpstreamVoiceSessionID == "" {
+		t.Fatal("expected sticky upstream voice session id on bind")
 	}
 	if binding, forbidden := svc.boundVoiceSession("api_key:2", id); binding != nil || !forbidden {
 		t.Fatalf("cross-key binding was not rejected: binding=%+v forbidden=%v", binding, forbidden)
@@ -97,6 +100,129 @@ func TestVoiceSessionOwnership(t *testing.T) {
 	}
 	if !svc.ReleaseSession("api_key:1", id) {
 		t.Fatal("owner could not release the voice session")
+	}
+}
+
+func TestBuildSessionJSONResumesUpstreamConversation(t *testing.T) {
+	raw := buildSessionJSON("cove", "wingman", "zh-cn", UpstreamContext{
+		UpstreamVoiceSessionID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+		ConversationID:         "conv-123",
+		ParentMessageID:        "msg-parent",
+	})
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["voice_session_id"] != "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" {
+		t.Fatalf("voice_session_id=%v", payload["voice_session_id"])
+	}
+	if payload["conversation_id"] != "conv-123" || payload["parent_message_id"] != "msg-parent" {
+		t.Fatalf("unexpected continuity fields: %+v", payload)
+	}
+}
+
+func TestExtractConversationTitle(t *testing.T) {
+	title, ok := extractConversationTitle(`{"title":"Plan weekend trip","conversation_id":"c1"}`)
+	if !ok || title != "Plan weekend trip" {
+		t.Fatalf("got %q ok=%v", title, ok)
+	}
+	if _, ok := extractConversationTitle(`{"title":"New chat"}`); ok {
+		t.Fatal("placeholder title should be ignored")
+	}
+	if _, ok := extractConversationTitle(`{"title":""}`); ok {
+		t.Fatal("empty title should be ignored")
+	}
+	if !validUpstreamConversationID("abc-123_XYZ") {
+		t.Fatal("expected valid id")
+	}
+	if validUpstreamConversationID("../evil") || validUpstreamConversationID("a/b") {
+		t.Fatal("path-like ids must be rejected")
+	}
+}
+
+func TestFetchUpstreamTitleUsesBoundAccount(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"title":"Voice resume demo","create_time":1.0}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
+	svc.conversationURLPrefix = upstream.URL + "/backend-api/conversation/"
+	account := accounts.Account{ID: 9, DeviceID: "device-title"}
+	id := svc.bindVoiceSession("api_key:1", "", "token-secret", account, UpstreamContext{
+		ConversationID: "conv-title-1",
+	})
+
+	result, err := svc.FetchUpstreamTitle("api_key:1", id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.HasTitle || result.Title != "Voice resume demo" || result.UpstreamConversationID != "conv-title-1" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if gotAuth != "Bearer token-secret" {
+		t.Fatalf("auth=%q", gotAuth)
+	}
+	if !strings.HasSuffix(gotPath, "/backend-api/conversation/conv-title-1") {
+		t.Fatalf("path=%q", gotPath)
+	}
+	if _, err := svc.FetchUpstreamTitle("api_key:2", id, ""); err == nil {
+		t.Fatal("expected foreign owner rejection")
+	}
+}
+
+func TestFetchUpstreamTitleEmptyWhenNotGenerated(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"title":"New chat"}`))
+	}))
+	t.Cleanup(upstream.Close)
+	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
+	svc.conversationURLPrefix = upstream.URL + "/backend-api/conversation/"
+	id := svc.bindVoiceSession("api_key:1", "", "token", accounts.Account{ID: 1}, UpstreamContext{
+		ConversationID: "conv-empty",
+	})
+	result, err := svc.FetchUpstreamTitle("api_key:1", id, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.HasTitle || result.Title != "" {
+		t.Fatalf("expected empty title: %+v", result)
+	}
+}
+
+func TestUpdateSessionContextMergesUpstreamIDs(t *testing.T) {
+	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
+	account := accounts.Account{ID: 3, DeviceID: "device"}
+	id := svc.bindVoiceSession("api_key:1", "", "token", account, UpstreamContext{
+		UpstreamVoiceSessionID: "UPSTREAM-1",
+	})
+	updated, err := svc.UpdateSessionContext("api_key:1", id, UpstreamContext{
+		ConversationID:  "conv-9",
+		ParentMessageID: "msg-9",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ConversationID != "conv-9" || updated.ParentMessageID != "msg-9" || updated.UpstreamVoiceSessionID != "UPSTREAM-1" {
+		t.Fatalf("unexpected merge: %+v", updated)
+	}
+	if _, err := svc.UpdateSessionContext("api_key:2", id, UpstreamContext{ConversationID: "x"}); err == nil {
+		t.Fatal("expected foreign owner update to fail")
+	}
+	// Re-bind with empty patch must preserve continuity fields.
+	svc.bindVoiceSession("api_key:1", id, "token", account, UpstreamContext{})
+	ctx, err := svc.SessionContext("api_key:1", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.ConversationID != "conv-9" || ctx.ParentMessageID != "msg-9" || ctx.UpstreamVoiceSessionID != "UPSTREAM-1" {
+		t.Fatalf("rebind dropped continuity: %+v", ctx)
 	}
 }
 

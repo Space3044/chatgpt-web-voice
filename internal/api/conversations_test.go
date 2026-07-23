@@ -59,6 +59,14 @@ func TestConversationManagementAPI(t *testing.T) {
 	if rename.Code != http.StatusOK || !strings.Contains(rename.Body.String(), "Dinner renamed") {
 		t.Fatalf("rename failed: %d %s", rename.Code, rename.Body.String())
 	}
+	bindAccount := performJSONRequest(t, mux, http.MethodPatch, "/api/conversations/"+createBody.Conversation.ID, map[string]any{
+		"account_id":               int64(7),
+		"upstream_conversation_id": "conv-sticky",
+		"gateway_voice_session_id": "vs_sticky",
+	})
+	if bindAccount.Code != http.StatusOK || !strings.Contains(bindAccount.Body.String(), `"account_id":7`) {
+		t.Fatalf("sticky account bind failed: %d %s", bindAccount.Code, bindAccount.Body.String())
+	}
 	deleteResp := performJSONRequest(t, mux, http.MethodDelete, "/api/conversations/"+createBody.Conversation.ID, nil)
 	if deleteResp.Code != http.StatusNoContent {
 		t.Fatalf("delete status=%d body=%s", deleteResp.Code, deleteResp.Body.String())

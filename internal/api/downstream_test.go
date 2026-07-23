@@ -32,6 +32,7 @@ func (s *downstreamVoiceStub) CreateSession(req voice.CreateSessionRequest) (*vo
 	return &voice.SessionResult{
 		AnswerSDP:      "v=0\r\nanswer\r\n",
 		VoiceSessionID: "vs_test",
+		AccountID:      9,
 		Voice:          "cove",
 		VoiceMode:      "wingman",
 		LanguageCode:   "zh-cn",
@@ -44,8 +45,38 @@ func (s *downstreamVoiceStub) ReleaseSession(owner, id string) bool {
 	return owner == "api_key:1" && id == "vs_test"
 }
 
+func (s *downstreamVoiceStub) UpdateSessionContext(owner, id string, patch voice.UpstreamContext) (voice.UpstreamContext, error) {
+	if owner != "api_key:1" || id != "vs_test" {
+		return voice.UpstreamContext{}, &voice.ServiceError{Message: "voice session not found", StatusCode: http.StatusNotFound}
+	}
+	return patch, nil
+}
+
+func (s *downstreamVoiceStub) FetchUpstreamTitle(owner, id, conversationID string) (*voice.UpstreamTitleResult, error) {
+	if owner != "api_key:1" || id != "vs_test" {
+		return nil, &voice.ServiceError{Message: "voice session not found", StatusCode: http.StatusNotFound}
+	}
+	title := "Downstream title"
+	if conversationID != "" {
+		title = "Title for " + conversationID
+	}
+	return &voice.UpstreamTitleResult{
+		VoiceSessionID:         id,
+		UpstreamConversationID: orDefaultString(conversationID, "conv-bound"),
+		Title:                  title,
+		HasTitle:               true,
+	}, nil
+}
+
 func (s *downstreamVoiceStub) ProbeAccountToken(int64) (*voice.ProbeResult, error) {
 	return nil, nil
+}
+
+func orDefaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func newDownstreamTestHandler(t *testing.T, voiceService VoiceService) (http.Handler, string) {
@@ -127,9 +158,31 @@ func TestDownstreamConfigAndSessionIsolation(t *testing.T) {
 	if _, exists := sessionBody["session_id"]; exists {
 		t.Fatalf("downstream response exposed internal compatibility field: %s", sessionResp.Body.String())
 	}
-	for _, forbidden := range []string{"account_id", "access_token", "device_id", "proxy"} {
+	// Downstream resume handle is only voice_session_id; pool account stays server-side.
+	if _, exists := sessionBody["voice_session_id"]; !exists {
+		t.Fatalf("expected voice_session_id in session response: %s", sessionResp.Body.String())
+	}
+	for _, forbidden := range []string{"account_id", "access_token", "device_id", "proxy", "upstream_conversation_id", "upstream_voice_session_id"} {
 		if _, exists := sessionBody[forbidden]; exists {
 			t.Fatalf("downstream response exposed %q: %s", forbidden, sessionResp.Body.String())
+		}
+	}
+
+	contextResp := performDownstreamRequest(t, handler, http.MethodPost, "/v1/voice/sessions/vs_test/context", secret, map[string]any{
+		"upstream_conversation_id":   "conv-1",
+		"upstream_parent_message_id": "msg-1",
+	})
+	if contextResp.Code != http.StatusOK || !strings.Contains(contextResp.Body.String(), "conv-1") {
+		t.Fatalf("context status=%d body=%s", contextResp.Code, contextResp.Body.String())
+	}
+
+	titleResp := performDownstreamRequest(t, handler, http.MethodGet, "/v1/voice/sessions/vs_test/title?upstream_conversation_id=conv-1", secret, nil)
+	if titleResp.Code != http.StatusOK || !strings.Contains(titleResp.Body.String(), "Title for conv-1") {
+		t.Fatalf("title status=%d body=%s", titleResp.Code, titleResp.Body.String())
+	}
+	for _, forbidden := range []string{"access_token", "token-secret", "account_id"} {
+		if strings.Contains(titleResp.Body.String(), forbidden) {
+			t.Fatalf("title response leaked %q: %s", forbidden, titleResp.Body.String())
 		}
 	}
 

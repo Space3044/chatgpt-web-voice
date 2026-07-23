@@ -11,18 +11,41 @@ import (
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/store"
 )
 
-const conversationSelectColumns = `id, owner, title, preview, created_at, updated_at`
+const conversationSelectColumns = `id, owner, title, preview,
+	COALESCE(account_id, 0),
+	COALESCE(upstream_conversation_id, ''),
+	COALESCE(upstream_parent_message_id, ''),
+	COALESCE(upstream_voice_session_id, ''),
+	COALESCE(gateway_voice_session_id, ''),
+	created_at, updated_at`
 
 // Conversation is one persisted voice/chat workspace owned by an authenticated
 // gateway user.
 type Conversation struct {
-	ID        string    `json:"id"`
-	Owner     string    `json:"-"`
-	Title     string    `json:"title"`
-	Preview   string    `json:"preview"`
-	CreatedAt string    `json:"created_at"`
-	UpdatedAt string    `json:"updated_at"`
-	Messages  []Message `json:"messages,omitempty"`
+	ID                      string    `json:"id"`
+	Owner                   string    `json:"-"`
+	Title                   string    `json:"title"`
+	Preview                 string    `json:"preview"`
+	// AccountID is the sticky pool account used for this conversation's upstream
+	// chatgpt.com thread. 0 means no account has been bound yet.
+	AccountID               int64     `json:"account_id,omitempty"`
+	UpstreamConversationID  string    `json:"upstream_conversation_id,omitempty"`
+	UpstreamParentMessageID string    `json:"upstream_parent_message_id,omitempty"`
+	UpstreamVoiceSessionID  string    `json:"upstream_voice_session_id,omitempty"`
+	GatewayVoiceSessionID   string    `json:"gateway_voice_session_id,omitempty"`
+	CreatedAt               string    `json:"created_at"`
+	UpdatedAt               string    `json:"updated_at"`
+	Messages                []Message `json:"messages,omitempty"`
+}
+
+// UpstreamContextUpdate is the partial continuity state written after a voice
+// call learns chatgpt.com conversation identifiers and the sticky pool account.
+type UpstreamContextUpdate struct {
+	AccountID               *int64
+	UpstreamConversationID  *string
+	UpstreamParentMessageID *string
+	UpstreamVoiceSessionID  *string
+	GatewayVoiceSessionID   *string
 }
 
 // Message is an idempotently persisted message. ClientID remains stable while a
@@ -128,6 +151,57 @@ func (s *Store) UpdateTitle(owner, id, title string) (Conversation, error) {
 	}
 	if count == 0 {
 		return Conversation{}, ErrNotFound
+	}
+	return s.getUnlocked(owner, id)
+}
+
+// UpdateUpstreamContext stores chatgpt.com continuity identifiers for a local
+// conversation so the next voice call can try to resume the same upstream thread.
+// Nil pointer fields keep their existing values; empty strings clear a field.
+func (s *Store) UpdateUpstreamContext(owner, id string, update UpstreamContextUpdate) (Conversation, error) {
+	owner = normalizeOwner(owner)
+	id = strings.TrimSpace(id)
+	s.db.Lock()
+	defer s.db.Unlock()
+	current, err := s.getUnlocked(owner, id)
+	if err != nil {
+		return Conversation{}, err
+	}
+	if update.AccountID != nil {
+		if *update.AccountID < 0 {
+			return Conversation{}, &Error{Message: "account_id must be >= 0"}
+		}
+		current.AccountID = *update.AccountID
+	}
+	if update.UpstreamConversationID != nil {
+		current.UpstreamConversationID = truncateText(*update.UpstreamConversationID, 160)
+	}
+	if update.UpstreamParentMessageID != nil {
+		current.UpstreamParentMessageID = truncateText(*update.UpstreamParentMessageID, 160)
+	}
+	if update.UpstreamVoiceSessionID != nil {
+		current.UpstreamVoiceSessionID = truncateText(*update.UpstreamVoiceSessionID, 160)
+	}
+	if update.GatewayVoiceSessionID != nil {
+		current.GatewayVoiceSessionID = truncateText(*update.GatewayVoiceSessionID, 160)
+	}
+	if _, err := s.db.Conn().Exec(`
+		UPDATE conversations SET
+			account_id = ?,
+			upstream_conversation_id = ?,
+			upstream_parent_message_id = ?,
+			upstream_voice_session_id = ?,
+			gateway_voice_session_id = ?,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE id = ? AND owner = ?`,
+		current.AccountID,
+		current.UpstreamConversationID,
+		current.UpstreamParentMessageID,
+		current.UpstreamVoiceSessionID,
+		current.GatewayVoiceSessionID,
+		id, owner,
+	); err != nil {
+		return Conversation{}, fmt.Errorf("update conversation upstream context: %w", err)
 	}
 	return s.getUnlocked(owner, id)
 }
@@ -309,6 +383,9 @@ func scanConversation(row store.Scanner) (Conversation, error) {
 	var conversation Conversation
 	if err := row.Scan(
 		&conversation.ID, &conversation.Owner, &conversation.Title, &conversation.Preview,
+		&conversation.AccountID,
+		&conversation.UpstreamConversationID, &conversation.UpstreamParentMessageID,
+		&conversation.UpstreamVoiceSessionID, &conversation.GatewayVoiceSessionID,
 		&conversation.CreatedAt, &conversation.UpdatedAt,
 	); err != nil {
 		return Conversation{}, err

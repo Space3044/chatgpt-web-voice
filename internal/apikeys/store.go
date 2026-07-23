@@ -172,6 +172,13 @@ func (s *Store) Stats() (Stats, error) {
 	return stats, nil
 }
 
+// Get returns one API key metadata row by id.
+func (s *Store) Get(id int64) (Key, error) {
+	s.db.Lock()
+	defer s.db.Unlock()
+	return s.getUnlocked(id)
+}
+
 func (s *Store) getUnlocked(id int64) (Key, error) {
 	key, err := scanKey(s.db.Conn().QueryRow("SELECT "+selectFields+" FROM api_keys WHERE id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {

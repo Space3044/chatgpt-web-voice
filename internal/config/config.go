@@ -104,7 +104,7 @@ func Load() Config {
 		TokenEncryptionKey: envRaw("VOICE_TOKEN_ENCRYPTION_KEY", ""),
 		Impersonate:        env("VOICE_IMPERSONATE", "chrome136"),
 		SkipSSLVerify:      skipSSLVerify,
-		SessionTTLSeconds:  envInt("VOICE_SESSION_TTL_SECONDS", 6*60*60),
+		SessionTTLSeconds:  envInt("VOICE_SESSION_TTL_SECONDS", 3*60),
 		MaxAccountAttempts: maxAttempts,
 		DefaultUA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
 			"AppleWebKit/537.36 (KHTML, like Gecko) " +

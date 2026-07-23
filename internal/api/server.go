@@ -26,6 +26,7 @@ type ConversationStore interface {
 	Create(owner, title string) (conversations.Conversation, error)
 	Get(owner, id string) (conversations.Conversation, error)
 	UpdateTitle(owner, id, title string) (conversations.Conversation, error)
+	UpdateUpstreamContext(owner, id string, update conversations.UpstreamContextUpdate) (conversations.Conversation, error)
 	Delete(owner, id string) error
 	UpsertMessage(owner, conversationID string, message conversations.Message) (conversations.Message, error)
 }
@@ -33,6 +34,7 @@ type ConversationStore interface {
 // APIKeyStore is the administrator-facing API key management surface.
 type APIKeyStore interface {
 	List() ([]apikeys.Key, error)
+	Get(id int64) (apikeys.Key, error)
 	Create(name string) (apikeys.CreatedKey, error)
 	Update(id int64, update apikeys.Update) (apikeys.Key, error)
 	Delete(id int64) error
@@ -43,6 +45,8 @@ type APIKeyStore interface {
 type VoiceService interface {
 	CreateSession(req voice.CreateSessionRequest) (*voice.SessionResult, error)
 	ReleaseSession(owner, voiceSessionID string) bool
+	UpdateSessionContext(owner, voiceSessionID string, patch voice.UpstreamContext) (voice.UpstreamContext, error)
+	FetchUpstreamTitle(owner, voiceSessionID, conversationID string) (*voice.UpstreamTitleResult, error)
 	ProbeAccountToken(accountID int64) (*voice.ProbeResult, error)
 }
 
@@ -53,6 +57,7 @@ type Dependencies struct {
 	Accounts      AccountStore
 	Conversations ConversationStore
 	APIKeys       APIKeyStore
+	CallSessions  CallSessionStore
 }
 
 // Server holds HTTP handlers for the voice gateway.
@@ -61,6 +66,7 @@ type Server struct {
 	accounts      AccountStore
 	conversations ConversationStore
 	apiKeys       APIKeyStore
+	callSessions  CallSessionStore
 }
 
 // New creates an API server from domain dependencies.
@@ -70,6 +76,7 @@ func New(deps Dependencies) *Server {
 		accounts:      deps.Accounts,
 		conversations: deps.Conversations,
 		apiKeys:       deps.APIKeys,
+		callSessions:  deps.CallSessions,
 	}
 }
 
@@ -78,6 +85,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/voice/health", s.health)
 	mux.HandleFunc("POST /api/voice/session", s.session)
 	mux.HandleFunc("POST /api/voice/session/release", s.release)
+	mux.HandleFunc("POST /api/voice/session/context", s.sessionContext)
+	mux.HandleFunc("GET /api/voice/session/title", s.sessionTitle)
 	mux.HandleFunc("GET /api/voice/config", s.voiceConfig)
 	mux.HandleFunc("GET /api/accounts", s.listAccounts)
 	mux.HandleFunc("POST /api/accounts", s.createAccount)
@@ -88,6 +97,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/keys", s.createAPIKey)
 	mux.HandleFunc("PATCH /api/keys/{id}", s.updateAPIKey)
 	mux.HandleFunc("DELETE /api/keys/{id}", s.deleteAPIKey)
+	mux.HandleFunc("GET /api/call-sessions", s.listCallSessions)
+	mux.HandleFunc("DELETE /api/call-sessions/{id}", s.deleteCallSession)
 	mux.HandleFunc("GET /api/conversations", s.listConversations)
 	mux.HandleFunc("POST /api/conversations", s.createConversation)
 	mux.HandleFunc("GET /api/conversations/{id}", s.getConversation)
@@ -101,6 +112,8 @@ func (s *Server) RegisterDownstream(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/health", s.downstreamHealth)
 	mux.HandleFunc("GET /v1/voice/config", s.voiceConfig)
 	mux.HandleFunc("POST /v1/voice/sessions", s.downstreamSession)
+	mux.HandleFunc("POST /v1/voice/sessions/{id}/context", s.downstreamSessionContext)
+	mux.HandleFunc("GET /v1/voice/sessions/{id}/title", s.downstreamSessionTitle)
 	mux.HandleFunc("DELETE /v1/voice/sessions/{id}", s.downstreamRelease)
 }
 

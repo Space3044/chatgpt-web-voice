@@ -86,6 +86,54 @@ func TestConversationPersistenceAndOwnerIsolation(t *testing.T) {
 	}
 }
 
+func TestConversationUpstreamContextPersistence(t *testing.T) {
+	conversations := newTestStore(t)
+	conversation, err := conversations.Create("alice", "resume me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	convID := "upstream-conv-1"
+	parentID := "upstream-msg-1"
+	upstreamVS := "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+	gatewayVS := "vs_gateway_1"
+	accountID := int64(42)
+	updated, err := conversations.UpdateUpstreamContext("alice", conversation.ID, UpstreamContextUpdate{
+		AccountID:               &accountID,
+		UpstreamConversationID:  &convID,
+		UpstreamParentMessageID: &parentID,
+		UpstreamVoiceSessionID:  &upstreamVS,
+		GatewayVoiceSessionID:   &gatewayVS,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.AccountID != accountID ||
+		updated.UpstreamConversationID != convID ||
+		updated.UpstreamParentMessageID != parentID ||
+		updated.UpstreamVoiceSessionID != upstreamVS ||
+		updated.GatewayVoiceSessionID != gatewayVS {
+		t.Fatalf("unexpected upstream context: %+v", updated)
+	}
+	// Empty string clears a field; nil preserves. Zero account_id clears sticky account.
+	empty := ""
+	zeroAccount := int64(0)
+	cleared, err := conversations.UpdateUpstreamContext("alice", conversation.ID, UpstreamContextUpdate{
+		GatewayVoiceSessionID: &empty,
+		AccountID:             &zeroAccount,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.GatewayVoiceSessionID != "" || cleared.UpstreamConversationID != convID || cleared.AccountID != 0 {
+		t.Fatalf("clear/preserve failed: %+v", cleared)
+	}
+	if _, err := conversations.UpdateUpstreamContext("bob", conversation.ID, UpstreamContextUpdate{
+		UpstreamConversationID: &convID,
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected owner isolation, got %v", err)
+	}
+}
+
 func TestConversationTitleTruncationPreservesUTF8(t *testing.T) {
 	conversations := newTestStore(t)
 

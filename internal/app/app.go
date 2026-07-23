@@ -15,6 +15,7 @@ import (
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/api"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/apikeys"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/auth"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/callsessions"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/config"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/conversations"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/logging"
@@ -67,7 +68,15 @@ func Run() error {
 	}
 
 	conversationStore := conversations.NewStore(db)
+	callSessionStore := callsessions.NewStore(db)
 	apiKeyStore := apikeys.NewStore(db)
+	releasedOrphans, err := callSessionStore.MarkAllActiveReleased()
+	if err != nil {
+		return fmt.Errorf("release orphan call sessions failed: %w", err)
+	}
+	if releasedOrphans > 0 {
+		logger.Info("call_sessions_released_on_startup", "count", releasedOrphans)
+	}
 	available, err := accountPool.AvailableCount()
 	if err != nil {
 		return fmt.Errorf("account database check failed: %w", err)
@@ -81,12 +90,13 @@ func Run() error {
 		logger,
 	)
 	apiKeyManager := auth.NewAPIKeyManager(apiKeyStore, logger)
-	voiceService := voice.New(cfg, accountPool, logger)
+	voiceService := voice.New(cfg, accountPool, logger).WithCallSessions(callSessionStore)
 	apiServer := api.New(api.Dependencies{
 		Voice:         voiceService,
 		Accounts:      accountPool,
 		Conversations: conversationStore,
 		APIKeys:       apiKeyStore,
+		CallSessions:  callSessionStore,
 	})
 
 	handler := newHandler(cfg, authManager, apiKeyManager, apiServer, logger)
@@ -144,6 +154,8 @@ func newHandler(cfg config.Config, authManager *auth.Manager, apiKeyManager *aut
 	apiServer.RegisterDownstream(downstream)
 
 	root := http.NewServeMux()
+	// Shared CSS/assets must be public: login.html loads /static/app.css before auth.
+	registerPublicStaticAssets(root, cfg.StaticDir)
 	root.Handle("GET /login", authManager.LoginPage(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveFile(w, r, joinStatic(cfg.StaticDir, "login.html"))
 	})))
