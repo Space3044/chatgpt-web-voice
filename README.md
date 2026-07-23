@@ -64,7 +64,7 @@ go build -buildvcs=false -o bin/server ./cmd/server
 推荐使用 Docker Compose 部署。仓库根目录的 `docker-compose.yml` 已指向发布镜像：
 
 ```text
-ghcr.io/space3044/chatgpt-web-voice:latest
+ghcr.io/space3044/chatgpt-web-voice:main
 ```
 
 默认配置要点：
@@ -233,7 +233,7 @@ chatgpt.com + Azure WebRTC
 | `cmd/server` | 进程入口 |
 | `internal/app` | 依赖装配、静态页、TLS |
 | `internal/api` | HTTP 适配（管理端 + `/v1`） |
-| `internal/auth` | 浏览器会话 / Basic Auth / API Key |
+| `internal/auth` | 浏览器会话 / API Key |
 | `internal/accounts` | 账号池（token 密封） |
 | `internal/voice` | `/realtime/wm` 代理与会话绑定 |
 | `internal/callsessions` | 网关会话元数据（无聊天正文） |

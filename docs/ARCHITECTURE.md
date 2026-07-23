@@ -41,7 +41,7 @@ Gateway **不接收、不存储原始通话音频**；只持久化 conversation 
 ┌─────────────────────────────────────────────────────────────────┐
 │  Gateway (Go, stdlib net/http)                                  │
 │                                                                 │
-│  auth.Manager          浏览器会话 + Basic Auth                  │
+│  auth.Manager          浏览器会话（无 Basic Auth）               │
 │  auth.APIKeyManager    /v1 Bearer                               │
 │  accounts.Pool         SQLite 账号池 + AES-GCM 密封 token       │
 │  voice.Service         /realtime/wm 代理 + 内存 session 绑定    │
