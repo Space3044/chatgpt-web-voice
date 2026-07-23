@@ -1,6 +1,6 @@
 services:
   chatgpt-web-voice:
-    image: ghcr.io/space3044/chatgpt-web-voice:latest
+    image: ghcr.io/space3044/chatgpt-web-voice:main
     pull_policy: always
     container_name: chatgpt-web-voice
     network_mode: host
@@ -9,7 +9,6 @@ services:
       VOICE_AUTH_USERNAME: ${VOICE_AUTH_USERNAME:?VOICE_AUTH_USERNAME is required}
       VOICE_AUTH_PASSWORD: ${VOICE_AUTH_PASSWORD:?VOICE_AUTH_PASSWORD is required}
       VOICE_TOKEN_ENCRYPTION_KEY: ${VOICE_TOKEN_ENCRYPTION_KEY:?VOICE_TOKEN_ENCRYPTION_KEY is required}
-      VOICE_LOG_LEVEL: ${VOICE_LOG_LEVEL:-info}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
