@@ -43,14 +43,13 @@ func ImportJSONFile(path string) ([]Account, error) {
 			continue
 		}
 		account := Account{
-			Email:        stringField(fields, "email"),
-			AccessToken:  firstStringField(fields, "access_token", "token"),
-			RefreshToken: stringField(fields, "refresh_token"),
-			DeviceID:     firstStringField(fields, "device_id", "oai-device-id"),
-			Proxy:        stringField(fields, "proxy"),
-			Status:       stringField(fields, "status"),
-			Disabled:     boolField(fields, "disabled"),
-			InvalidAt:    floatField(fields, "invalid_at"),
+			Email:       stringField(fields, "email"),
+			AccessToken: firstStringField(fields, "access_token", "token"),
+			DeviceID:    firstStringField(fields, "device_id", "oai-device-id"),
+			Proxy:       stringField(fields, "proxy"),
+			Status:      stringField(fields, "status"),
+			Disabled:    boolField(fields, "disabled"),
+			InvalidAt:   floatField(fields, "invalid_at"),
 		}
 		if account.Status == "禁用" {
 			account.Disabled = true

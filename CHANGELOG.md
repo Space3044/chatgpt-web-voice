@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Removed unused account `refresh_token` storage, API fields, and accounts-panel UI; existing SQLite databases drop the column on startup.
 - Restored process proxy environment fallback for upstream ChatGPT traffic: account proxy still wins when set; otherwise Go honors `HTTP_PROXY` / `HTTPS_PROXY` and `NO_PROXY` (including lowercase variants).
 - Restructured internal packages into clearer layers: shared SQLite `store`, domain repositories (`accounts`, `conversations`), application services (`voice`), HTTP adapters (`api`), and composition root (`app`); `cmd/server` is now a thin entrypoint.
 - Replaced shared Bearer gateway key with environment-injected username/password login, HttpOnly browser sessions, and Basic Auth for automation.

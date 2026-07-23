@@ -11,7 +11,6 @@ func (db *DB) migrate() error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT NOT NULL DEFAULT '',
 			access_token TEXT NOT NULL UNIQUE,
-			refresh_token TEXT NOT NULL DEFAULT '',
 			device_id TEXT NOT NULL DEFAULT '',
 			proxy TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT '正常',
@@ -46,6 +45,44 @@ func (db *DB) migrate() error {
 		if _, err := db.conn.Exec(statement); err != nil {
 			return fmt.Errorf("initialize sqlite database: %w", err)
 		}
+	}
+	// Existing deployments may still have refresh_token from earlier schema.
+	// The gateway never used it; drop the column when present.
+	if err := db.dropColumnIfExists("accounts", "refresh_token"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (db *DB) dropColumnIfExists(table, column string) error {
+	rows, err := db.conn.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return fmt.Errorf("inspect table %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	found := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("read table info for %s: %w", table, err)
+		}
+		if name == column {
+			found = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate table info for %s: %w", table, err)
+	}
+	if !found {
+		return nil
+	}
+	if _, err := db.conn.Exec(fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", table, column)); err != nil {
+		return fmt.Errorf("drop column %s.%s: %w", table, column, err)
 	}
 	return nil
 }

@@ -11,7 +11,7 @@ import (
 )
 
 const accountSelectColumns = `
-	id, email, access_token, refresh_token, device_id, proxy, status, disabled, invalid_at,
+	id, email, access_token, device_id, proxy, status, disabled, invalid_at,
 	COALESCE(last_used_at, ''), created_at, updated_at`
 
 // Pool is the SQLite-backed account repository. Selection and invalidation are
@@ -100,9 +100,9 @@ func (p *Pool) Create(account Account) (Account, error) {
 	}
 	result, err := p.db.Conn().Exec(`
 		INSERT INTO accounts
-			(email, access_token, refresh_token, device_id, proxy, status, disabled, invalid_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		account.Email, account.AccessToken, account.RefreshToken, account.DeviceID,
+			(email, access_token, device_id, proxy, status, disabled, invalid_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		account.Email, account.AccessToken, account.DeviceID,
 		account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
 	if err != nil {
 		return Account{}, fmt.Errorf("create account: %w", err)
@@ -135,9 +135,6 @@ func (p *Pool) Update(id int64, update AccountUpdate) (Account, error) {
 		return Account{}, fmt.Errorf("%w: access_token already exists", ErrConflict)
 	}
 	current.Email = strings.TrimSpace(update.Email)
-	if update.RefreshToken != nil {
-		current.RefreshToken = *update.RefreshToken
-	}
 	current.DeviceID = strings.TrimSpace(update.DeviceID)
 	if update.Proxy != nil {
 		current.Proxy = strings.TrimSpace(*update.Proxy)
@@ -156,10 +153,10 @@ func (p *Pool) Update(id int64, update AccountUpdate) (Account, error) {
 	}
 	_, err = p.db.Conn().Exec(`
 		UPDATE accounts SET
-			email = ?, access_token = ?, refresh_token = ?, device_id = ?, proxy = ?,
+			email = ?, access_token = ?, device_id = ?, proxy = ?,
 			status = ?, disabled = ?, invalid_at = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`,
-		current.Email, current.AccessToken, current.RefreshToken, current.DeviceID,
+		current.Email, current.AccessToken, current.DeviceID,
 		current.Proxy, current.Status, boolInt(current.Disabled), invalidAt, id)
 	if err != nil {
 		return Account{}, fmt.Errorf("update account: %w", err)
@@ -211,18 +208,17 @@ func (p *Pool) Upsert(account Account) error {
 	defer p.db.Unlock()
 	_, err := p.db.Conn().Exec(`
 		INSERT INTO accounts
-			(email, access_token, refresh_token, device_id, proxy, status, disabled, invalid_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+			(email, access_token, device_id, proxy, status, disabled, invalid_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(access_token) DO UPDATE SET
 			email = excluded.email,
-			refresh_token = excluded.refresh_token,
 			device_id = excluded.device_id,
 			proxy = excluded.proxy,
 			status = excluded.status,
 			disabled = excluded.disabled,
 			invalid_at = excluded.invalid_at,
 			updated_at = CURRENT_TIMESTAMP`,
-		account.Email, account.AccessToken, account.RefreshToken,
+		account.Email, account.AccessToken,
 		account.DeviceID, account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
 	if err != nil {
 		return fmt.Errorf("upsert account: %w", err)
@@ -320,7 +316,7 @@ func scanAccount(row store.Scanner) (Account, error) {
 	var account Account
 	var disabled int
 	if err := row.Scan(
-		&account.ID, &account.Email, &account.AccessToken, &account.RefreshToken,
+		&account.ID, &account.Email, &account.AccessToken,
 		&account.DeviceID, &account.Proxy, &account.Status, &disabled, &account.InvalidAt,
 		&account.LastUsedAt, &account.CreatedAt, &account.UpdatedAt,
 	); err != nil {

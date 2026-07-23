@@ -57,19 +57,17 @@ func performJSONRequest(t *testing.T, handler http.Handler, method, path string,
 func TestAccountManagementAPI(t *testing.T) {
 	pool, mux := newAPITestServer(t)
 	createResp := performJSONRequest(t, mux, http.MethodPost, "/api/accounts", map[string]any{
-		"email":         "admin@example.com",
-		"access_token":  "secret-access-token-123456",
-		"refresh_token": "secret-refresh-token",
-		"device_id":     "device-1",
-		"proxy":         "http://user:password@127.0.0.1:8080",
-		"status":        "正常",
-		"disabled":      false,
+		"email":        "admin@example.com",
+		"access_token": "secret-access-token-123456",
+		"device_id":    "device-1",
+		"proxy":        "http://user:password@127.0.0.1:8080",
+		"status":       "正常",
+		"disabled":     false,
 	})
 	if createResp.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", createResp.Code, createResp.Body.String())
 	}
 	if strings.Contains(createResp.Body.String(), "secret-access-token-123456") ||
-		strings.Contains(createResp.Body.String(), "secret-refresh-token") ||
 		strings.Contains(createResp.Body.String(), "password") {
 		t.Fatalf("create response leaked secrets: %s", createResp.Body.String())
 	}
@@ -90,18 +88,16 @@ func TestAccountManagementAPI(t *testing.T) {
 		t.Fatalf("list status=%d body=%s", listResp.Code, listResp.Body.String())
 	}
 	if strings.Contains(listResp.Body.String(), "secret-access-token-123456") ||
-		strings.Contains(listResp.Body.String(), "secret-refresh-token") ||
 		strings.Contains(listResp.Body.String(), "password") {
 		t.Fatalf("list response leaked secrets: %s", listResp.Body.String())
 	}
 
 	updateResp := performJSONRequest(t, mux, http.MethodPut, "/api/accounts/"+jsonNumber(createBody.Account.ID), map[string]any{
-		"email":         "updated@example.com",
-		"refresh_token": "",
-		"device_id":     "device-2",
-		"proxy":         "",
-		"status":        "禁用",
-		"disabled":      true,
+		"email":     "updated@example.com",
+		"device_id": "device-2",
+		"proxy":     "",
+		"status":    "禁用",
+		"disabled":  true,
 	})
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("update status=%d body=%s", updateResp.Code, updateResp.Body.String())
@@ -110,7 +106,7 @@ func TestAccountManagementAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.AccessToken != "secret-access-token-123456" || stored.RefreshToken != "" || stored.Proxy != "" || !stored.Disabled {
+	if stored.AccessToken != "secret-access-token-123456" || stored.Proxy != "" || !stored.Disabled {
 		t.Fatalf("unexpected stored update: %+v", stored)
 	}
 

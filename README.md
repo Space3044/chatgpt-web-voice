@@ -298,9 +298,9 @@ Proxy selection for upstream ChatGPT requests:
 
 There is no gateway-wide `VOICE_*` proxy setting. These are standard process environment variables, and the account proxy always takes precedence. Docker Compose passes through the host shell's standard proxy variables when present. Windows system proxy/PAC settings are not automatically visible inside WSL or a container unless they are exported into that process environment.
 
-The `/accounts` panel supports create, edit, enable/disable, search, delete, JWT expiry display, and manual probe. Empty secret fields keep existing values on edit; refresh token and proxy have explicit clear actions.
+The `/accounts` panel supports create, edit, enable/disable, search, delete, JWT expiry display, and manual probe. Empty secret fields keep existing values on edit; proxy has an explicit clear action.
 
-List/write APIs never return full access tokens, refresh tokens, or proxy passwords. They expose an access-token preview, whether a refresh token exists, a password-free proxy preview, and JWT expiry metadata.
+List/write APIs never return full access tokens or proxy passwords. They expose an access-token preview, a password-free proxy preview, and JWT expiry metadata.
 
 ## Logging
 

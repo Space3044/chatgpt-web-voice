@@ -18,7 +18,6 @@ type accountView struct {
 	ID                 int64   `json:"id"`
 	Email              string  `json:"email"`
 	AccessTokenPreview string  `json:"access_token_preview"`
-	HasRefreshToken    bool    `json:"has_refresh_token"`
 	DeviceID           string  `json:"device_id"`
 	HasProxy           bool    `json:"has_proxy"`
 	ProxyPreview       string  `json:"proxy_preview"`
@@ -36,13 +35,12 @@ type accountView struct {
 }
 
 type accountWriteRequest struct {
-	Email        string  `json:"email"`
-	AccessToken  *string `json:"access_token"`
-	RefreshToken *string `json:"refresh_token"`
-	DeviceID     string  `json:"device_id"`
-	Proxy        *string `json:"proxy"`
-	Status       string  `json:"status"`
-	Disabled     bool    `json:"disabled"`
+	Email       string  `json:"email"`
+	AccessToken *string `json:"access_token"`
+	DeviceID    string  `json:"device_id"`
+	Proxy       *string `json:"proxy"`
+	Status      string  `json:"status"`
+	Disabled    bool    `json:"disabled"`
 }
 
 func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
@@ -83,9 +81,6 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 		Status:      request.Status,
 		Disabled:    request.Disabled,
 	}
-	if request.RefreshToken != nil {
-		account.RefreshToken = *request.RefreshToken
-	}
 	if request.Proxy != nil {
 		account.Proxy = *request.Proxy
 	}
@@ -110,13 +105,12 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := s.accounts.Update(id, accounts.AccountUpdate{
-		Email:        request.Email,
-		AccessToken:  request.AccessToken,
-		RefreshToken: request.RefreshToken,
-		DeviceID:     request.DeviceID,
-		Proxy:        request.Proxy,
-		Status:       request.Status,
-		Disabled:     request.Disabled,
+		Email:       request.Email,
+		AccessToken: request.AccessToken,
+		DeviceID:    request.DeviceID,
+		Proxy:       request.Proxy,
+		Status:      request.Status,
+		Disabled:    request.Disabled,
 	})
 	if err != nil {
 		writeAccountError(w, r, err)
@@ -207,9 +201,6 @@ func decodeAccountWriteRequest(w http.ResponseWriter, r *http.Request) (accountW
 		}
 		request.AccessToken = &value
 	}
-	if request.RefreshToken != nil && len(*request.RefreshToken) > 64<<10 {
-		return accountWriteRequest{}, fmt.Errorf("refresh_token is too long")
-	}
 	if request.Proxy != nil {
 		value := strings.TrimSpace(*request.Proxy)
 		if len(value) > 4096 {
@@ -234,7 +225,6 @@ func newAccountView(account accounts.Account) accountView {
 		ID:                 account.ID,
 		Email:              account.Email,
 		AccessTokenPreview: secretPreview(account.AccessToken),
-		HasRefreshToken:    account.RefreshToken != "",
 		DeviceID:           account.DeviceID,
 		HasProxy:           account.Proxy != "",
 		ProxyPreview:       proxyPreview(account.Proxy),

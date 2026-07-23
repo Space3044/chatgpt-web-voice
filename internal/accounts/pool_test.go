@@ -111,11 +111,10 @@ func TestImportLegacyJSON(t *testing.T) {
 func TestAccountCRUDAndStats(t *testing.T) {
 	pool := newTestPool(t)
 	created, err := pool.Create(Account{
-		Email:        "admin@example.com",
-		AccessToken:  "access-token-123456",
-		RefreshToken: "refresh-token",
-		DeviceID:     "device-1",
-		Proxy:        "http://user:password@127.0.0.1:8080",
+		Email:       "admin@example.com",
+		AccessToken: "access-token-123456",
+		DeviceID:    "device-1",
+		Proxy:       "http://user:password@127.0.0.1:8080",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -135,18 +134,17 @@ func TestAccountCRUDAndStats(t *testing.T) {
 	}
 
 	updated, err := pool.Update(created.ID, AccountUpdate{
-		Email:        "updated@example.com",
-		AccessToken:  nil,
-		RefreshToken: stringPointer(""),
-		DeviceID:     "device-2",
-		Proxy:        stringPointer(""),
-		Status:       "禁用",
-		Disabled:     true,
+		Email:       "updated@example.com",
+		AccessToken: nil,
+		DeviceID:    "device-2",
+		Proxy:       stringPointer(""),
+		Status:      "禁用",
+		Disabled:    true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.AccessToken != created.AccessToken || updated.RefreshToken != "" || updated.Proxy != "" || !updated.Disabled || updated.Status != "禁用" {
+	if updated.AccessToken != created.AccessToken || updated.Proxy != "" || !updated.Disabled || updated.Status != "禁用" {
 		t.Fatalf("unexpected disabled update: %+v", updated)
 	}
 	stats, err = pool.Stats()
