@@ -56,8 +56,20 @@ WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates tzdata wget bash zlib1g \
   && rm -rf /var/lib/apt/lists/* \
-  && groupadd -g 1000 -r voice \
-  && useradd -u 1000 -g voice -r -M -d /app -s /usr/sbin/nologin voice \
+  && if ! getent group voice >/dev/null; then \
+       if getent group 1000 >/dev/null; then \
+         groupadd -r voice; \
+       else \
+         groupadd -g 1000 -r voice; \
+       fi; \
+     fi \
+  && if ! id -u voice >/dev/null 2>&1; then \
+       if getent passwd 1000 >/dev/null; then \
+         useradd -g voice -r -M -d /app -s /usr/sbin/nologin voice; \
+       else \
+         useradd -u 1000 -g voice -r -M -d /app -s /usr/sbin/nologin voice; \
+       fi; \
+     fi \
   && mkdir -p /app/data /app/bin/curl-impersonate \
   && chown voice:voice /app/data
 
