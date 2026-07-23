@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Sealed ChatGPT `access_token` values at rest with AES-256-GCM (`VOICE_TOKEN_ENCRYPTION_KEY`); uniqueness and preferred-token lookups use a keyed `token_hash`, and startup rewrites legacy plaintext rows in place.
+- Added hashed downstream API keys with one-time secret display, SQLite metadata, administrator CRUD APIs, and a `/keys` management panel.
+- Added an API-key-only `/v1` integration surface for capability discovery, SDP session creation, and caller-owned session release without exposing account-pool data.
+- Centralized voice, language, STUN, and negotiated DataChannel capabilities in the Go backend; the built-in browser client now consumes the same configuration as downstream clients.
 - Removed unused account `refresh_token` storage, API fields, and accounts-panel UI; existing SQLite databases drop the column on startup.
 - Restored process proxy environment fallback for upstream ChatGPT traffic: account proxy still wins when set; otherwise Go honors `HTTP_PROXY` / `HTTPS_PROXY` and `NO_PROXY` (including lowercase variants).
 - Restructured internal packages into clearer layers: shared SQLite `store`, domain repositories (`accounts`, `conversations`), application services (`voice`), HTTP adapters (`api`), and composition root (`app`); `cmd/server` is now a thin entrypoint.

@@ -6,7 +6,7 @@
 
 Self-hosted **ChatGPT.com Web Voice** gateway. The browser owns WebRTC media; this service owns the account pool, SDP proxy to `chatgpt.com/realtime/wm`, voice-session binding, and persisted text conversations.
 
-Use a ChatGPT web `access_token` from your own account pool. No official Realtime API key is required for this web path. Upstream credentials stay on the server in SQLite and are never returned to the browser.
+Use a ChatGPT web `access_token` from your own account pool. No official Realtime API key is required for this web path. Upstream credentials are sealed in SQLite (AES-256-GCM) and are never returned to the browser in full.
 
 ## Features
 
@@ -16,6 +16,9 @@ Use a ChatGPT web `access_token` from your own account pool. No official Realtim
 - Captions from `chat_message_delta`
 - Voice session token binding (`voice_session_id`)
 - Authenticated SQLite account pool panel
+- AES-256-GCM sealed ChatGPT access tokens at rest (`VOICE_TOKEN_ENCRYPTION_KEY`)
+- Hashed downstream API keys with one-time secret display
+- API-key-only `/v1` SDP connection API and public voice capability document
 - JWT expiry display for stored access tokens
 - Manual account probe against `backend-api/settings/user`
 - Chat-style voice workspace with session history and settings drawer
@@ -27,7 +30,8 @@ WebRTC media flows between the browser and the upstream service. The gateway doe
 
 ```bash
 cp .env.example .env
-# set VOICE_AUTH_USERNAME and VOICE_AUTH_PASSWORD
+# set VOICE_AUTH_USERNAME, VOICE_AUTH_PASSWORD, and VOICE_TOKEN_ENCRYPTION_KEY
+# VOICE_TOKEN_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ```
 
 `VOICE_ENV` defaults to `development` and only accepts `development` or `production`. Development may enable gateway TLS for LAN microphone use via `./scripts/dev.sh --tls` (self-signed cert under `data/certs/`).
@@ -54,11 +58,18 @@ http://127.0.0.1:8090/accounts
 
 The accounts panel is also linked from the voice page settings drawer.
 
+Create and revoke downstream API keys at:
+
+```text
+http://127.0.0.1:8090/keys
+```
+
 ### Optional: legacy JSON import
 
 If you still have an old `accounts.json`, import it once. The running server never reads that file.
 
 ```bash
+# requires VOICE_TOKEN_ENCRYPTION_KEY in the environment
 go run ./cmd/migrate-accounts \
   -from ./data/accounts.json \
   -database ./data/voice.db
@@ -77,7 +88,7 @@ go build -buildvcs=false -o bin/server ./cmd/server
 
 ```bash
 cp .env.example .env
-# set VOICE_AUTH_USERNAME and VOICE_AUTH_PASSWORD
+# set VOICE_AUTH_USERNAME, VOICE_AUTH_PASSWORD, and VOICE_TOKEN_ENCRYPTION_KEY
 mkdir -p data
 docker compose up --build -d
 docker compose ps
@@ -85,7 +96,7 @@ docker compose ps
 
 Open `http://127.0.0.1:8090/voice` by default. Change the published host port with `VOICE_PORT`.
 
-The production image sets `VOICE_ENV=production` and `VOICE_TLS=false`. Serve HTTPS at Nginx, Traefik, Caddy, or another reverse proxy. SQLite data lives in `./data`; static assets are baked into the image (rebuild after frontend changes). Compose requires `VOICE_AUTH_USERNAME` and `VOICE_AUTH_PASSWORD`.
+The production image sets `VOICE_ENV=production` and `VOICE_TLS=false`. Serve HTTPS at Nginx, Traefik, Caddy, or another reverse proxy. SQLite data lives in `./data`; static assets are baked into the image (rebuild after frontend changes). Compose requires `VOICE_AUTH_USERNAME`, `VOICE_AUTH_PASSWORD`, and `VOICE_TOKEN_ENCRYPTION_KEY`.
 
 ```bash
 docker compose logs -f chatgpt-web-voice
@@ -148,18 +159,26 @@ Development convenience only. Production should keep the gateway on internal HTT
 ## Architecture
 
 ```text
-Browser (static/voice.html)
+Built-in browser (static/voice.html)
   mic + RTCPeerConnection + DataChannel(oai-events)
         |
         | POST /api/voice/session
         v
 Gateway (Go, stdlib net/http)
-  SQLite account pool + per-account proxy
+  administrator auth + downstream API key auth
+  SQLite account pool + per-account proxy + hashed API keys
   header shaping for ChatGPT web requests
         |
         v
 chatgpt.com
   /realtime/wm  +  Azure WebRTC media
+
+Downstream backend
+  Authorization: Bearer vgw_live_...
+  GET /v1/voice/config
+  POST /v1/voice/sessions
+        |
+        +--> returns answer SDP; downstream owns WebRTC, captions, and history
 ```
 
 Internal package layout:
@@ -169,6 +188,7 @@ cmd/server              process entrypoint
 internal/app            wiring, HTTP root, TLS, static routes
 internal/api            HTTP handlers (depends on domain interfaces)
 internal/auth           login sessions and Basic Auth
+internal/apikeys        hashed downstream credentials
 internal/voice          realtime session + account probe service
 internal/accounts       ChatGPT account pool repository
 internal/conversations  conversation / caption repository
@@ -204,11 +224,21 @@ curl -u "$VOICE_AUTH_USERNAME:$VOICE_AUTH_PASSWORD" \
 Authorization: Basic <base64(username:password)>
 ```
 
+Downstream integrations use a separately generated Bearer API key. API keys
+can access `/v1/*` only; they cannot access pages, account management,
+conversations, or administrator APIs. Keep long-lived keys in the downstream
+backend rather than browser JavaScript.
+
+```http
+Authorization: Bearer vgw_live_<random-secret>
+```
+
 ## API
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/voice/health` | health |
+| GET | `/api/voice/config` | non-secret voice/WebRTC capabilities for the built-in client |
 | POST | `/api/voice/session` | offer SDP → answer SDP |
 | POST | `/api/voice/session/release` | unbind voice session |
 | GET | `/api/accounts` | list accounts and pool stats (secrets redacted; includes JWT expiry fields) |
@@ -216,6 +246,10 @@ Authorization: Basic <base64(username:password)>
 | PUT | `/api/accounts/{id}` | update / enable / disable account |
 | DELETE | `/api/accounts/{id}` | delete account |
 | POST | `/api/accounts/{id}/check` | probe token via `GET /backend-api/settings/user` |
+| GET | `/api/keys` | list redacted downstream API key metadata |
+| POST | `/api/keys` | create a key and return its secret once |
+| PATCH | `/api/keys/{id}` | rename, enable, or disable a key |
+| DELETE | `/api/keys/{id}` | permanently revoke and delete a key |
 | GET | `/api/conversations` | list conversations for the logged-in user |
 | POST | `/api/conversations` | create conversation |
 | GET | `/api/conversations/{id}` | read conversation and messages |
@@ -238,6 +272,49 @@ Only signaling and voice options are accepted. Downstream clients must not send 
   "voice_session_id": ""
 }
 ```
+
+### Downstream connection API
+
+The gateway only authenticates the caller, selects an internal account, and
+exchanges SDP. The downstream owns `RTCPeerConnection`, microphone/audio,
+DataChannel events, captions, business conversations, and persistence.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/health` | authenticated downstream API health |
+| GET | `/v1/voice/config` | voices, languages, defaults, STUN, and DataChannel configuration |
+| POST | `/v1/voice/sessions` | offer SDP → answer SDP |
+| DELETE | `/v1/voice/sessions/{voice_session_id}` | release the caller-owned gateway binding |
+
+```bash
+curl -X POST https://voice.example.com/v1/voice/sessions \
+  -H "Authorization: Bearer $VOICE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "offer_sdp": "v=0\\r\\n...",
+    "voice": "cove",
+    "voice_mode": "wingman",
+    "language_code": "auto"
+  }'
+```
+
+```json
+{
+  "answer_sdp": "v=0\r\n...",
+  "voice_session_id": "vs_...",
+  "voice": "cove",
+  "voice_mode": "wingman",
+  "language_code": "auto"
+}
+```
+
+The response never includes account IDs, email addresses, access tokens,
+device IDs, proxies, account status, or pool statistics. A voice session is
+namespaced to the API key that created it, so another key cannot reuse or
+release that binding. Omit `voice_session_id` when creating the first
+connection; a later reconnect may send the ID previously returned by the same
+API key. Unknown IDs return `404`, while unknown voice, mode, or language
+values return `400`.
 
 ### Account probe
 
@@ -284,9 +361,11 @@ Interrupt:
 { "type": "action_request", "payload": { "action": "stop_speaking" } }
 ```
 
-## Account pool and SQLite
+## SQLite data
 
-Runtime database: `VOICE_DATABASE_FILE` (default under `data/voice.db`). It stores account-pool fields, conversations, and messages as plaintext. The file is created with owner-only permissions where supported.
+Runtime database: `VOICE_DATABASE_FILE` (default under `data/voice.db`). Conversation text is stored as plaintext. ChatGPT `access_token` values are sealed with AES-256-GCM using `VOICE_TOKEN_ENCRYPTION_KEY` (32-byte hex or base64); uniqueness uses a keyed `token_hash` column. Downstream API key secrets store only SHA-256 hashes and display prefixes. The database file is created with owner-only permissions where supported.
+
+Generate a stable encryption key once (`openssl rand -hex 32`) and back it up with the same care as the login password. Losing the key makes existing sealed account tokens unreadable. On startup the gateway rewrites any legacy plaintext `access_token` rows in place.
 
 Selection prefers the least recently used enabled account. An upstream **401** from the voice path or from a manual probe disables that account in SQLite.
 
@@ -300,6 +379,12 @@ There is no gateway-wide `VOICE_*` proxy setting. These are standard process env
 
 The `/accounts` panel supports create, edit, enable/disable, search, delete, JWT expiry display, and manual probe. Empty secret fields keep existing values on edit; proxy has an explicit clear action.
 
+The `/keys` panel supports create, one-time secret copy, rename, enable/disable,
+and delete. Disabling or deleting a key blocks subsequent `/v1` requests. Since
+media flows directly between the downstream and ChatGPT after SDP exchange,
+revoking a key does not forcibly terminate an already established peer
+connection.
+
 List/write APIs never return full access tokens or proxy passwords. They expose an access-token preview, a password-free proxy preview, and JWT expiry metadata.
 
 ## Logging
@@ -312,6 +397,7 @@ JSON logs by default. HTTP access events include request ID, method, path, statu
 |---|---|---|
 | `VOICE_AUTH_USERNAME` | required | gateway login username |
 | `VOICE_AUTH_PASSWORD` | required | gateway login password |
+| `VOICE_TOKEN_ENCRYPTION_KEY` | required | 32-byte key (hex or base64) that seals account access tokens at rest |
 | `VOICE_PORT` | `8090` | Docker Compose host port |
 | `VOICE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
 
@@ -325,6 +411,8 @@ In production, upstream TLS verification is always on (`VOICE_SKIP_SSL_VERIFY` i
 cmd/server/              gateway entrypoint
 cmd/migrate-accounts/    one-time JSON → SQLite migration
 internal/auth/           browser session + Basic Auth
+internal/apikeys/        SQLite API key hashes and metadata
+internal/secretbox/      AES-GCM seal/open for account access tokens
 internal/config/         environment config
 internal/accounts/       SQLite accounts and conversations
 internal/logging/        slog setup and HTTP middleware
@@ -335,14 +423,17 @@ internal/api/            protected HTTP handlers
 static/login.html        login page
 static/voice.html        voice client
 static/accounts.html     account pool panel
+static/keys.html         downstream API key panel
 data/voice.db            runtime database (gitignored)
 ```
 
 ## Security
 
-- Do not commit `voice.db`, credential dumps, or tokens
+- Do not commit `voice.db`, credential dumps, tokens, or `VOICE_TOKEN_ENCRYPTION_KEY`
+- ChatGPT `access_token` values are sealed in SQLite; keep the encryption key offline-backed up
 - The browser only holds a gateway session cookie; it never receives an upstream web token
-- Use HTTPS whenever the login page is reachable beyond localhost
+- Downstream API keys are shown once, stored as hashes, and scoped to `/v1/*`
+- Use HTTPS whenever the login page is reachable beyond localhost (for example Caddy reverse proxy)
 - Keep gateway credentials strong and private
 
 ## License / disclaimer
