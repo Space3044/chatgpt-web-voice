@@ -1,0 +1,1497 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>账号池 · Voice Gateway</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310a37f'/%3E%3Cpath d='M16 34h8l4-14 8 27 5-18h7' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <script>
+    (function () {
+      try {
+        var key = 'chatgpt_web_voice_theme_v1';
+        var theme = localStorage.getItem(key);
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #ffffff;
+      --surface: #ffffff;
+      --surface-2: #f7f7f8;
+      --ink: #111113;
+      --muted: #6b6b73;
+      --line: #ebebef;
+      --green: #10a37f;
+      --green-dark: #0d8c6d;
+      --green-soft: rgba(16, 163, 127, .12);
+      --red: #e11d48;
+      --red-soft: rgba(225, 29, 72, .08);
+      --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .06);
+      --focus: 0 0 0 3px rgba(16, 163, 127, .22);
+      --topbar-bg: rgba(255,255,255,.92);
+      --chip-bg: #ffffff;
+      --chip-hover: #f0f0f2;
+      --input-bg: #ffffff;
+      --row-hover: #fafafa;
+      --toast-bg: rgba(255, 255, 255, .98);
+      --toast-ink: #111113;
+      --toast-border: rgba(16, 163, 127, .28);
+      --toast-glow: rgba(16, 163, 127, .10);
+      --toast-shadow: 0 8px 24px rgba(16, 24, 40, .10);
+      --dialog-backdrop: rgba(15, 15, 18, .42);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f0f10;
+      --surface: #161618;
+      --surface-2: #1c1c1f;
+      --ink: #f4f4f5;
+      --muted: #a1a1aa;
+      --line: #2a2a2e;
+      --green-dark: #35c89f;
+      --green-soft: rgba(16, 163, 127, .18);
+      --red: #fb7185;
+      --red-soft: rgba(251, 113, 133, .12);
+      --shadow: 0 1px 2px rgba(0,0,0,.25), 0 12px 32px rgba(0,0,0,.35);
+      --focus: 0 0 0 3px rgba(16, 163, 127, .32);
+      --topbar-bg: rgba(15,15,16,.92);
+      --chip-bg: #1c1c1f;
+      --chip-hover: #26262a;
+      --input-bg: #1c1c1f;
+      --row-hover: #1a1a1d;
+      --toast-bg: rgba(32, 33, 35, .96);
+      --toast-ink: #f4f4f5;
+      --toast-border: rgba(53, 200, 159, .42);
+      --toast-glow: rgba(16, 163, 127, .14);
+      --toast-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+      --dialog-backdrop: rgba(0, 0, 0, .58);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: "Inter", "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    button, input, select { font: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+      outline: none; box-shadow: var(--focus);
+    }
+    .topbar {
+      position: sticky; top: 0; z-index: 30;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 20px;
+      background: var(--topbar-bg);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+    }
+    .brand {
+      display: flex; align-items: center; gap: 10px; min-width: 0;
+      flex: 1 1 0;
+      color: var(--ink); text-decoration: none;
+    }
+    .brand-mark {
+      width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto;
+      display: grid; place-items: center;
+      background: var(--green); color: #fff;
+      font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .brand-title { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+    .top-actions {
+      display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
+      justify-content: flex-end; min-width: 0; flex: 1 1 0;
+    }
+    .header-chip, .nav-link, .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 34px; padding: 0 12px; border-radius: 9px;
+      border: 1px solid var(--line); background: var(--chip-bg);
+      color: var(--ink); text-decoration: none; font-size: 12px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+    }
+    .header-chip:hover, .nav-link:hover, .btn:hover { background: var(--chip-hover); }
+    .btn-primary {
+      color: #fff; border-color: transparent; background: var(--green);
+    }
+    .btn-primary:hover { border-color: transparent; background: var(--green-dark); filter: none; }
+    .btn-danger { color: var(--red); }
+    .btn-danger:hover { background: var(--red-soft); border-color: transparent; }
+    .btn-small { min-height: 30px; padding: 0 10px; border-radius: 8px; font-size: 11px; }
+    .layout { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 48px; }
+    .page-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      margin-bottom: 16px;
+    }
+    .page-head h1 {
+      margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.03em; line-height: 1.2;
+    }
+    .stats {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .stat-pill {
+      display: inline-flex; align-items: baseline; gap: 6px;
+      padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--surface-2); font-size: 12px; color: var(--muted);
+    }
+    .stat-pill strong {
+      color: var(--ink); font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .pool-panel {
+      overflow: hidden;
+      border: 1px solid var(--line); border-radius: 14px;
+      background: var(--surface); box-shadow: var(--shadow);
+    }
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--surface);
+    }
+    .search { position: relative; flex: 1; max-width: 360px; }
+    .search::before {
+      content: "⌕"; position: absolute; left: 12px; top: 50%; transform: translateY(-52%);
+      color: var(--muted); font-size: 16px; pointer-events: none;
+    }
+    .search input {
+      width: 100%; height: 36px; padding: 0 12px 0 34px;
+      border: 1px solid var(--line); border-radius: 9px;
+      background: var(--input-bg); color: var(--ink); outline: none;
+    }
+    .search input:focus { border-color: var(--green); box-shadow: var(--focus); }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+    }
+    thead th {
+      position: sticky; top: 0; z-index: 1;
+      padding: 13px 12px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      background: var(--surface-2);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      text-align: center;
+      white-space: nowrap;
+    }
+    th.col-account { width: 18%; }
+    th.col-token { width: 16%; }
+    th.col-route { width: 14%; }
+    th.col-status { width: 10%; }
+    th.col-expiry { width: 12%; }
+    th.col-used { width: 12%; }
+    th.col-actions { width: 18%; }
+    .badge.expired { color: var(--red); background: var(--red-soft); }
+    .badge.warn { color: #9a6700; background: rgba(234, 179, 8, 0.16); }
+    .meta-tag.warn { color: #9a6700; background: rgba(234, 179, 8, 0.16); }
+    .meta-tag.danger { color: var(--red); background: var(--red-soft); }
+    td {
+      padding: 14px 12px;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      vertical-align: middle;
+      text-align: center;
+      color: var(--ink);
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: var(--row-hover); }
+    tbody tr.disabled { opacity: .88; }
+    .cell-stack {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      justify-items: center;
+    }
+    .cell-title {
+      overflow: hidden;
+      max-width: 100%;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.35;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .cell-meta {
+      overflow: hidden;
+      max-width: 100%;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: -.01em;
+    }
+    .token-chip, .route-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 100%;
+      min-height: 26px;
+      padding: 3px 9px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-2);
+      color: var(--ink);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .meta-tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      min-height: 20px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 650;
+      line-height: 1;
+    }
+    .meta-tag.on {
+      color: var(--green-dark);
+      background: var(--green-soft);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 26px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      color: var(--green-dark);
+      background: var(--green-soft);
+    }
+    .badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge.disabled { color: var(--red); background: var(--red-soft); }
+    .time-main {
+      display: inline-block;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .actions .btn-small {
+      min-height: 28px;
+      padding: 0 9px;
+      border-radius: 7px;
+      font-size: 11px;
+      font-weight: 650;
+    }
+    .empty {
+      display: none;
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty.show { display: block; }
+    .empty strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--ink);
+      font-size: 15px;
+    }
+    dialog {
+      width: min(560px, calc(100% - 28px));
+      max-height: calc(100vh - 32px);
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 24px 64px rgba(16, 24, 40, .16);
+    }
+    dialog::backdrop {
+      background: var(--dialog-backdrop);
+      backdrop-filter: blur(4px);
+    }
+    .dialog-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .dialog-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    .dialog-close {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--chip-bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .dialog-body {
+      max-height: calc(100vh - 190px);
+      overflow-y: auto;
+      padding: 18px 20px 8px;
+    }
+    .form-section {
+      margin: 0 0 18px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface-2);
+    }
+    .form-section:last-child { margin-bottom: 12px; }
+    .form-section-title {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .field.full { grid-column: 1 / -1; }
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .field input, .field select {
+      width: 100%;
+      min-height: 42px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      outline: none;
+      color: var(--ink);
+      background: var(--input-bg);
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .field input:focus, .field select:focus {
+      border-color: var(--green);
+      box-shadow: var(--focus);
+    }
+    .field-control {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .field-control input {
+      min-width: 0;
+    }
+    .field-hint {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .clear-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      min-height: 42px;
+      margin: 0;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, color .15s ease;
+    }
+    .clear-action:hover {
+      border-color: rgba(225, 29, 72, .28);
+      background: var(--red-soft);
+      color: var(--red);
+    }
+    .clear-action.active {
+      border-color: rgba(225, 29, 72, .35);
+      background: var(--red-soft);
+      color: var(--red);
+    }
+    .clear-action:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+    .dialog-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 20px 16px;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .form-message { min-height: 18px; color: var(--red); font-size: 12px; }
+    .dialog-actions { display: flex; gap: 8px; }
+    .header-toast {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      max-width: min(520px, 72vw);
+      padding: 8px 16px;
+      border: 1px solid var(--toast-border);
+      border-radius: 16px;
+      background: var(--toast-bg);
+      color: var(--toast-ink);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.4;
+      white-space: normal;
+      text-align: center;
+      overflow: hidden;
+      box-shadow: var(--toast-shadow), 0 0 0 4px var(--toast-glow);
+      opacity: 0;
+      transform: translate(-50%, calc(-50% - 4px)) scale(.98);
+      transition: opacity .2s ease, transform .2s ease, background .2s ease, color .2s ease, border-color .2s ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .header-toast.show {
+      display: inline-flex;
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    @media (max-width: 780px) {
+      .topbar { padding: 10px 12px; }
+      .layout { width: calc(100% - 24px); padding-top: 18px; }
+      .page-head { align-items: stretch; flex-direction: column; }
+      .toolbar { align-items: stretch; flex-direction: column; }
+      .search { max-width: none; }
+      thead { display: none; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      tbody { padding: 8px; }
+      tbody tr {
+        margin-bottom: 8px; overflow: hidden;
+        border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+      }
+      tbody tr:last-child { margin-bottom: 0; }
+      td {
+        display: grid;
+        grid-template-columns: 88px minmax(0, 1fr);
+        gap: 10px;
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+      }
+      td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+        text-align: left;
+      }
+      .cell-stack { justify-items: start; }
+      .actions { justify-content: flex-start; flex-wrap: wrap; }
+      .form-section { padding: 12px; }
+      .field-grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: 1; }
+      .field-control { gap: 6px; }
+      .clear-action { padding: 0 10px; }
+      .dialog-foot { align-items: stretch; flex-direction: column; }
+      .dialog-actions { justify-content: flex-end; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .header-toast { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/voice">
+      <span class="brand-mark">AP</span>
+      <span class="brand-title" data-i18n="brandTitle">账号池</span>
+    </a>
+    <div id="toast" class="header-toast" role="status" aria-live="polite"></div>
+    <div class="top-actions">
+      <button type="button" class="header-chip" id="btnUiLocale" data-i18n-title="localeAria" data-i18n-aria="localeAria" title="语言" aria-label="语言">中文</button>
+      <button type="button" class="header-chip" id="btnUiTheme" data-i18n-title="themeAria" data-i18n-aria="themeAria" title="主题" aria-label="主题">浅色</button>
+      <a class="nav-link" href="/voice" data-i18n="backVoice">语音通话</a>
+      <button type="button" class="nav-link" id="logoutButton" data-i18n="logout">退出</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <div class="page-head">
+      <h1 data-i18n="title">账号池</h1>
+      <button type="button" class="btn btn-primary" id="addAccountButton"><span>＋</span><span data-i18n="addAccount">新增账户</span></button>
+    </div>
+
+    <div class="stats">
+      <span class="stat-pill"><strong id="totalCount">0</strong><span data-i18n="total">全部</span></span>
+      <span class="stat-pill"><strong id="availableCount">0</strong><span data-i18n="available">可用</span></span>
+      <span class="stat-pill"><strong id="disabledCount">0</strong><span data-i18n="disabled">禁用</span></span>
+    </div>
+
+    <section class="pool-panel">
+      <div class="toolbar">
+        <div class="search">
+          <input id="searchInput" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="搜索 email、token、device ID…" autocomplete="off" />
+        </div>
+        <button type="button" class="btn" id="refreshButton" data-i18n="refresh">刷新</button>
+      </div>
+      <div id="tableWrap" class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-account" data-i18n="columnAccount">账户</th>
+              <th class="col-token" data-i18n="columnToken">Token</th>
+              <th class="col-route" data-i18n="columnRoute">路由</th>
+              <th class="col-status" data-i18n="columnStatus">状态</th>
+              <th class="col-expiry" data-i18n="columnExpiry">过期</th>
+              <th class="col-used" data-i18n="columnLastUsed">最近使用</th>
+              <th class="col-actions" data-i18n="columnActions">操作</th>
+            </tr>
+          </thead>
+          <tbody id="accountRows"></tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="empty">
+        <strong id="emptyTitle" data-i18n="emptyTitle">暂无账户</strong>
+        <span id="emptyText" data-i18n="emptyText">点击右上角新增账户</span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="accountDialog">
+    <form id="accountForm" method="dialog">
+      <div class="dialog-head">
+        <h2 id="dialogTitle">新增账户</h2>
+        <button type="button" class="dialog-close" id="dialogClose" aria-label="Close">×</button>
+      </div>
+      <div class="dialog-body">
+        <section class="form-section">
+          <div class="form-section-title" data-i18n="sectionBasic">基本信息</div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="emailInput" data-i18n="emailLabel">邮箱</label>
+              <input id="emailInput" type="email" maxlength="320" autocomplete="off" placeholder="you@example.com" />
+            </div>
+            <div class="field">
+              <label for="statusInput" data-i18n="statusLabel">状态</label>
+              <select id="statusInput">
+                <option value="正常" data-i18n="statusAvailable">正常</option>
+                <option value="禁用" data-i18n="statusDisabled">禁用</option>
+              </select>
+            </div>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-title" data-i18n="sectionSecrets">凭证</div>
+          <div class="field-grid">
+            <div class="field full">
+              <label for="accessTokenInput" data-i18n="accessTokenLabel">Access token</label>
+              <div class="field-control">
+                <input id="accessTokenInput" type="password" autocomplete="new-password" />
+                <button type="button" class="clear-action" id="clearAccessToken" data-i18n="clearAccess" aria-pressed="false">清空</button>
+              </div>
+              <span id="accessTokenHint" class="field-hint"></span>
+            </div>
+            <div class="field full">
+              <label for="refreshTokenInput" data-i18n="refreshTokenLabel">Refresh token</label>
+              <div class="field-control">
+                <input id="refreshTokenInput" type="password" autocomplete="new-password" />
+                <button type="button" class="clear-action" id="clearRefreshToken" data-i18n="clearRefresh" aria-pressed="false">清空</button>
+              </div>
+              <span id="refreshTokenHint" class="field-hint"></span>
+            </div>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="form-section-title" data-i18n="sectionRoute">路由</div>
+          <div class="field-grid">
+            <div class="field full">
+              <label for="deviceIDInput" data-i18n="deviceIdLabel">Device ID</label>
+              <div class="field-control">
+                <input id="deviceIDInput" type="text" maxlength="512" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+                <button type="button" class="clear-action" id="clearDeviceID" data-i18n="clearDevice" aria-pressed="false">清空</button>
+              </div>
+            </div>
+            <div class="field full">
+              <label for="proxyInput" data-i18n="proxyLabel">Proxy</label>
+              <div class="field-control">
+                <input id="proxyInput" type="password" maxlength="4096" autocomplete="new-password" placeholder="http://user:pass@host:port" />
+                <button type="button" class="clear-action" id="clearProxy" data-i18n="clearProxy" aria-pressed="false">清空</button>
+              </div>
+              <span id="proxyHint" class="field-hint"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="dialog-foot">
+        <span id="formMessage" class="form-message" role="alert" aria-live="polite"></span>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="cancelButton" data-i18n="cancel">取消</button>
+          <button type="submit" class="btn btn-primary" id="saveButton" data-i18n="save">保存账户</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+
+  <script>
+    (function () {
+      'use strict';
+
+      var accounts = [];
+      var stats = { total: 0, available: 0, disabled: 0 };
+      var editingID = 0;
+      var localeKey = 'chatgpt_web_voice_ui_locale_v1';
+      var themeKey = 'chatgpt_web_voice_theme_v1';
+      var locale = 'zh';
+      var theme = 'light';
+      var toastTimer = 0;
+
+      var I18N = {
+        zh: {
+          pageTitle: '账号池 · Voice Gateway',
+          brandTitle: '账号池',
+          backVoice: '语音通话',
+          logout: '退出',
+          title: '账号池',
+          addAccount: '新增账户',
+          total: '全部',
+          available: '可用',
+          disabled: '禁用',
+          searchPlaceholder: '搜索 email、token、device ID…',
+          refresh: '刷新',
+          columnAccount: '账户',
+          columnToken: 'Token',
+          columnRoute: '路由',
+          columnStatus: '状态',
+          columnExpiry: '过期',
+          columnLastUsed: '最近使用',
+          columnActions: '操作',
+          check: '探测',
+          checking: '探测中…',
+          probeAlive: '存活 · HTTP {code}',
+          probeUnauthorized: '失效 · 已禁用 · HTTP {code}',
+          probeUnknown: '未知 · HTTP {code} · {detail}',
+          probeTimeoutDirect: '上游超时（直连）。当前网络访问不了 chatgpt.com，请给该账号配置 proxy 后再探测。',
+          probeTimeoutProxy: '上游超时（经账号 proxy）。请检查 proxy 是否可达。',
+          probeNetwork: '探测失败：{detail}',
+          tokenExpired: '已过期',
+          tokenExpiresIn: '剩余 {value}',
+          tokenNoExp: '无 exp',
+          tokenNotJWT: '非 JWT',
+          sectionBasic: '基本信息',
+          sectionSecrets: '凭证',
+          sectionRoute: '路由',
+          emailLabel: '邮箱',
+          accessTokenLabel: 'Access token',
+          refreshTokenLabel: 'Refresh token',
+          deviceIdLabel: 'Device ID',
+          proxyLabel: 'Proxy',
+          deviceLabel: '设备',
+          proxyDirect: '直连',
+          noDevice: '未设置设备',
+          accountId: 'ID {id}',
+
+          emptyTitle: '暂无账户',
+          emptyText: '点击右上角新增账户',
+          noResultsTitle: '没有匹配的账户',
+          noResultsText: '换个关键词试试',
+          statusLabel: '状态',
+          statusAvailable: '正常',
+          statusDisabled: '禁用',
+          clearAccess: '清空',
+          clearRefresh: '清空',
+          clearDevice: '清空',
+          clearProxy: '清空',
+          clearAccessDone: '将清空',
+          clearRefreshDone: '将清空',
+          clearDeviceDone: '将清空',
+          clearProxyDone: '将清空',
+          cancel: '取消',
+          save: '保存账户',
+          createTitle: '新增账户',
+          createDescription: '',
+          editTitle: '编辑账户',
+          editDescription: '',
+          accessRequired: 'Access token 必填',
+          accessOptional: '可选。填写后将覆盖现有值',
+          accessKeep: '可选。留空保持现有：{preview}',
+          refreshHint: '可选',
+          refreshConfigured: '可选。已配置，留空保持不变',
+          refreshEmpty: '可选',
+          proxyHint: '可选，例如 http://user:pass@host:port',
+          proxyConfigured: '可选。当前：{preview}，留空保持不变',
+          proxyEmpty: '可选，例如 http://user:pass@host:port',
+          saved: '账户已保存',
+          deleted: '账户已删除',
+          enabledToast: '账户已启用',
+          disabledToast: '账户已禁用',
+          loading: '加载中…',
+          loadFailed: '无法加载账号池',
+          sessionExpired: '登录已失效',
+          edit: '编辑',
+          enable: '启用',
+          disable: '禁用',
+          delete: '删除',
+          refreshTokenYes: '已配置 refresh',
+          refreshTokenNo: '无 refresh',
+          proxyNone: '直连',
+          never: '从未使用',
+          availableBadge: '可用',
+          disabledBadge: '禁用',
+          confirmDelete: '确认删除账户“{name}”？此操作会永久移除 SQLite 中的 credential。',
+          poolHealthy: '{available}/{total}',
+          saving: '正在保存…',
+          themeLight: '浅色',
+          themeDark: '深色',
+          themeAria: '主题',
+          localeAria: '语言'
+        },
+        en: {
+          pageTitle: 'Account Pool · Voice Gateway',
+          brandTitle: 'Accounts',
+          backVoice: 'Voice',
+          logout: 'Log out',
+          title: 'Accounts',
+          addAccount: 'Add account',
+          total: 'All',
+          available: 'Available',
+          disabled: 'Disabled',
+          searchPlaceholder: 'Search email, token preview, device ID…',
+          refresh: 'Refresh',
+          columnAccount: 'Account',
+          columnToken: 'Token',
+          columnRoute: 'Route',
+          columnStatus: 'Status',
+          columnExpiry: 'Expiry',
+          columnLastUsed: 'Last used',
+          columnActions: 'Actions',
+          check: 'Check',
+          checking: 'Checking…',
+          probeAlive: 'Alive · HTTP {code}',
+          probeUnauthorized: 'Invalid · disabled · HTTP {code}',
+          probeUnknown: 'Unknown · HTTP {code} · {detail}',
+          probeTimeoutDirect: 'Upstream timed out on a direct connection. chatgpt.com is unreachable here — set this account proxy and retry.',
+          probeTimeoutProxy: 'Upstream timed out via the account proxy. Check that the proxy is reachable.',
+          probeNetwork: 'Probe failed: {detail}',
+          tokenExpired: 'Expired',
+          tokenExpiresIn: '{value} left',
+          tokenNoExp: 'No exp',
+          tokenNotJWT: 'Not JWT',
+          sectionBasic: 'Basics',
+          sectionSecrets: 'Credentials',
+          sectionRoute: 'Routing',
+          emailLabel: 'Email',
+          accessTokenLabel: 'Access token',
+          refreshTokenLabel: 'Refresh token',
+          deviceIdLabel: 'Device ID',
+          proxyLabel: 'Proxy',
+          deviceLabel: 'Device',
+          proxyDirect: 'Direct',
+          noDevice: 'No device',
+          accountId: 'ID {id}',
+
+          emptyTitle: 'No accounts',
+          emptyText: 'Add an account to get started',
+          noResultsTitle: 'No matching accounts',
+          noResultsText: 'Try a different search term.',
+          statusLabel: 'Status',
+          statusAvailable: 'Available',
+          statusDisabled: 'Disabled',
+          clearAccess: 'Clear',
+          clearRefresh: 'Clear',
+          clearDevice: 'Clear',
+          clearProxy: 'Clear',
+          clearAccessDone: 'Will clear',
+          clearRefreshDone: 'Will clear',
+          clearDeviceDone: 'Will clear',
+          clearProxyDone: 'Will clear',
+          cancel: 'Cancel',
+          save: 'Save account',
+          createTitle: 'Add account',
+          createDescription: '',
+          editTitle: 'Edit account',
+          editDescription: '',
+          accessRequired: 'Access token is required',
+          accessOptional: 'Optional. Leave blank to keep the current value',
+          accessKeep: 'Optional. Leave blank to keep: {preview}',
+          refreshHint: 'Optional',
+          refreshConfigured: 'Optional. Configured — leave blank to keep',
+          refreshEmpty: 'Optional',
+          proxyHint: 'Optional, e.g. http://user:pass@host:port',
+          proxyConfigured: 'Optional. Current: {preview} — leave blank to keep',
+          proxyEmpty: 'Optional, e.g. http://user:pass@host:port',
+          saved: 'Account saved',
+          deleted: 'Account deleted',
+          enabledToast: 'Account enabled',
+          disabledToast: 'Account disabled',
+          loading: 'Loading…',
+          loadFailed: 'Could not load the account pool',
+          sessionExpired: 'Login expired',
+          edit: 'Edit',
+          enable: 'Enable',
+          disable: 'Disable',
+          delete: 'Delete',
+          refreshTokenYes: 'Refresh set',
+          refreshTokenNo: 'No refresh',
+          proxyNone: 'Direct',
+          never: 'Never',
+          availableBadge: 'Available',
+          disabledBadge: 'Disabled',
+          confirmDelete: 'Delete account “{name}”? This permanently removes its credential from SQLite.',
+          poolHealthy: '{available}/{total} available',
+          saving: 'Saving…',
+          themeLight: 'Light',
+          themeDark: 'Dark',
+          themeAria: 'Theme',
+          localeAria: 'Language'
+        }
+      };
+
+      var rows = document.getElementById('accountRows');
+      var tableWrap = document.getElementById('tableWrap');
+      var emptyState = document.getElementById('emptyState');
+      var emptyTitle = document.getElementById('emptyTitle');
+      var emptyText = document.getElementById('emptyText');
+      var searchInput = document.getElementById('searchInput');
+      var dialog = document.getElementById('accountDialog');
+      var form = document.getElementById('accountForm');
+      var dialogTitle = document.getElementById('dialogTitle');
+      var emailInput = document.getElementById('emailInput');
+      var statusInput = document.getElementById('statusInput');
+      var accessTokenInput = document.getElementById('accessTokenInput');
+      var refreshTokenInput = document.getElementById('refreshTokenInput');
+      var deviceIDInput = document.getElementById('deviceIDInput');
+      var proxyInput = document.getElementById('proxyInput');
+      var clearAccessToken = document.getElementById('clearAccessToken');
+      var clearRefreshToken = document.getElementById('clearRefreshToken');
+      var clearDeviceID = document.getElementById('clearDeviceID');
+      var clearProxy = document.getElementById('clearProxy');
+      var accessTokenHint = document.getElementById('accessTokenHint');
+      var refreshTokenHint = document.getElementById('refreshTokenHint');
+      var proxyHint = document.getElementById('proxyHint');
+      var formMessage = document.getElementById('formMessage');
+      var saveButton = document.getElementById('saveButton');
+      var toastElement = document.getElementById('toast');
+      var clearAccessActive = false;
+      var clearRefreshActive = false;
+      var clearDeviceActive = false;
+      var clearProxyActive = false;
+
+      function t(key, values) {
+        var text = (I18N[locale] && I18N[locale][key]) || I18N.zh[key] || key;
+        Object.keys(values || {}).forEach(function (name) {
+          text = text.replaceAll('{' + name + '}', String(values[name]));
+        });
+        return text;
+      }
+
+      function setClearAction(button, active, idleKey, activeKey) {
+        if (!button) return;
+        button.classList.toggle('active', !!active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        button.textContent = t(active ? activeKey : idleKey);
+      }
+
+      function resetClearActions() {
+        clearAccessActive = false;
+        clearRefreshActive = false;
+        clearDeviceActive = false;
+        clearProxyActive = false;
+        setClearAction(clearAccessToken, false, 'clearAccess', 'clearAccessDone');
+        setClearAction(clearRefreshToken, false, 'clearRefresh', 'clearRefreshDone');
+        setClearAction(clearDeviceID, false, 'clearDevice', 'clearDeviceDone');
+        setClearAction(clearProxy, false, 'clearProxy', 'clearProxyDone');
+      }
+
+      function bindClearAction(button, getActive, setActive, input, idleKey, activeKey) {
+        if (!button) return;
+        button.onclick = function () {
+          if (editingID > 0) {
+            var next = !getActive();
+            setActive(next);
+            if (next && input) input.value = '';
+            setClearAction(button, next, idleKey, activeKey);
+            return;
+          }
+          if (input) input.value = '';
+          setActive(false);
+          setClearAction(button, false, idleKey, activeKey);
+        };
+        if (input) {
+          input.addEventListener('input', function () {
+            if (!input.value || !getActive()) return;
+            setActive(false);
+            setClearAction(button, false, idleKey, activeKey);
+          });
+        }
+      }
+
+      function updateLocaleThemeButtons() {
+        var btnLocale = document.getElementById('btnUiLocale');
+        var btnTheme = document.getElementById('btnUiTheme');
+        if (btnLocale) {
+          btnLocale.textContent = locale === 'en' ? 'EN' : '中文';
+          btnLocale.setAttribute('title', t('localeAria'));
+          btnLocale.setAttribute('aria-label', t('localeAria'));
+        }
+        if (btnTheme) {
+          btnTheme.textContent = theme === 'dark' ? t('themeDark') : t('themeLight');
+          btnTheme.setAttribute('title', t('themeAria'));
+          btnTheme.setAttribute('aria-label', t('themeAria'));
+        }
+      }
+
+      function applyLocale(nextLocale) {
+        locale = nextLocale === 'en' ? 'en' : 'zh';
+        try { localStorage.setItem(localeKey, locale); } catch (_) {}
+        document.documentElement.lang = locale === 'en' ? 'en' : 'zh-CN';
+        document.title = t('pageTitle');
+        document.querySelectorAll('[data-i18n]').forEach(function (element) {
+          element.textContent = t(element.getAttribute('data-i18n'));
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(function (element) {
+          element.placeholder = t(element.getAttribute('data-i18n-placeholder'));
+        });
+        document.querySelectorAll('[data-i18n-title]').forEach(function (element) {
+          element.setAttribute('title', t(element.getAttribute('data-i18n-title')));
+        });
+        document.querySelectorAll('[data-i18n-aria]').forEach(function (element) {
+          element.setAttribute('aria-label', t(element.getAttribute('data-i18n-aria')));
+        });
+        updateLocaleThemeButtons();
+        setClearAction(clearAccessToken, clearAccessActive, 'clearAccess', 'clearAccessDone');
+        setClearAction(clearRefreshToken, clearRefreshActive, 'clearRefresh', 'clearRefreshDone');
+        setClearAction(clearDeviceID, clearDeviceActive, 'clearDevice', 'clearDeviceDone');
+        setClearAction(clearProxy, clearProxyActive, 'clearProxy', 'clearProxyDone');
+        render();
+        if (dialog.open) updateDialogCopy();
+      }
+
+      function applyTheme(nextTheme, persist) {
+        theme = nextTheme === 'dark' ? 'dark' : 'light';
+        if (persist !== false) {
+          try { localStorage.setItem(themeKey, theme); } catch (_) {}
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+        updateLocaleThemeButtons();
+      }
+
+      function escapeHTML(value) {
+        return String(value == null ? '' : value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
+
+      function formatDate(value) {
+        if (!value) return t('never');
+        var normalized = value;
+        if (/^\d{4}-\d{2}-\d{2} /.test(value)) normalized = value.replace(' ', 'T') + 'Z';
+        var date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) return value;
+        return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        }).format(date);
+      }
+
+      function formatDuration(seconds) {
+        var total = Math.abs(Number(seconds) || 0);
+        var days = Math.floor(total / 86400);
+        var hours = Math.floor((total % 86400) / 3600);
+        var minutes = Math.floor((total % 3600) / 60);
+        if (days > 0) {
+          return locale === 'en'
+            ? (days + 'd ' + hours + 'h')
+            : (days + ' 天 ' + hours + ' 小时');
+        }
+        if (hours > 0) {
+          return locale === 'en'
+            ? (hours + 'h ' + minutes + 'm')
+            : (hours + ' 小时 ' + minutes + ' 分');
+        }
+        if (minutes > 0) {
+          return locale === 'en' ? (minutes + 'm') : (minutes + ' 分钟');
+        }
+        return locale === 'en' ? '<1m' : '不到 1 分钟';
+      }
+
+      function formatExpiry(account) {
+        if (!account.token_has_exp) {
+          return { text: t('tokenNotJWT'), className: '', title: '' };
+        }
+        var expDate = account.token_exp
+          ? new Date(account.token_exp * 1000)
+          : null;
+        var title = expDate && !Number.isNaN(expDate.getTime())
+          ? expDate.toISOString()
+          : '';
+        if (account.token_expired) {
+          return {
+            text: t('tokenExpired') + (account.expires_in_seconds != null
+              ? ' · ' + formatDuration(account.expires_in_seconds)
+              : ''),
+            className: 'danger',
+            title: title
+          };
+        }
+        if (account.expires_in_seconds == null) {
+          return { text: t('tokenNoExp'), className: '', title: title };
+        }
+        var soon = account.expires_in_seconds < 24 * 3600;
+        return {
+          text: t('tokenExpiresIn', { value: formatDuration(account.expires_in_seconds) }),
+          className: soon ? 'warn' : 'on',
+          title: title
+        };
+      }
+
+      function accountName(account) {
+        return account.email || ('Account #' + account.id);
+      }
+
+      async function apiFetch(url, options) {
+        options = options || {};
+        options.credentials = 'same-origin';
+        var response = await fetch(url, options);
+        var data = {};
+        try { data = await response.json(); } catch (_) {}
+        if (response.status === 401) {
+          window.location.replace('/login');
+          throw new Error(t('sessionExpired'));
+        }
+        if (!response.ok) {
+          throw new Error((data.detail && data.detail.error) || ('HTTP ' + response.status));
+        }
+        return data;
+      }
+
+      async function loadAccounts(showLoadingToast) {
+        if (showLoadingToast) showToast(t('loading'));
+        try {
+          var data = await apiFetch('/api/accounts');
+          accounts = Array.isArray(data.accounts) ? data.accounts : [];
+          stats = data.stats || { total: accounts.length, available: 0, disabled: 0 };
+          render();
+        } catch (error) {
+          showToast(t('loadFailed') + ': ' + error.message);
+        }
+      }
+
+      function render() {
+        document.getElementById('totalCount').textContent = stats.total || 0;
+        document.getElementById('availableCount').textContent = stats.available || 0;
+        document.getElementById('disabledCount').textContent = stats.disabled || 0;
+
+        var query = searchInput.value.trim().toLowerCase();
+        var filtered = accounts.filter(function (account) {
+          if (!query) return true;
+          return [
+            account.email,
+            account.access_token_preview,
+            account.device_id,
+            account.proxy_preview,
+            account.status
+          ].join(' ').toLowerCase().includes(query);
+        });
+        rows.innerHTML = filtered.map(renderRow).join('');
+        var isEmpty = filtered.length === 0;
+        tableWrap.style.display = isEmpty ? 'none' : 'block';
+        emptyState.classList.toggle('show', isEmpty);
+        emptyTitle.textContent = accounts.length === 0 ? t('emptyTitle') : t('noResultsTitle');
+        emptyText.textContent = accounts.length === 0 ? t('emptyText') : t('noResultsText');
+      }
+
+
+      function shortToken(value) {
+        var text = String(value || '').trim();
+        if (!text) return '—';
+        if (text.length <= 22) return text;
+        return text.slice(0, 10) + '…' + text.slice(-8);
+      }
+
+      function shortDevice(value) {
+        var text = String(value || '').trim();
+        if (!text) return t('noDevice');
+        if (text.length <= 18) return text;
+        return text.slice(0, 8) + '…' + text.slice(-6);
+      }
+
+      function shortProxy(value) {
+        var text = String(value || '').trim();
+        if (!text) return t('proxyDirect');
+        if (text.length <= 24) return text;
+        return text.slice(0, 14) + '…' + text.slice(-6);
+      }
+
+      function renderRow(account) {
+        var statusClass = account.available ? '' : 'disabled';
+        var tokenPreview = shortToken(account.access_token_preview);
+        var refresh = account.has_refresh_token ? t('refreshTokenYes') : t('refreshTokenNo');
+        var device = shortDevice(account.device_id);
+        var route = account.has_proxy ? shortProxy(account.proxy_preview) : t('proxyDirect');
+        var expiry = formatExpiry(account);
+        return '<tr class="' + statusClass + '" data-id="' + account.id + '">' +
+          '<td data-label="' + escapeHTML(t('columnAccount')) + '">' +
+            '<div class="cell-stack">' +
+              '<span class="cell-title" title="' + escapeHTML(accountName(account)) + '">' + escapeHTML(accountName(account)) + '</span>' +
+              '<span class="cell-meta mono">' + escapeHTML(t('accountId', { id: account.id })) + '</span>' +
+            '</div>' +
+          '</td>' +
+          '<td data-label="' + escapeHTML(t('columnToken')) + '">' +
+            '<div class="cell-stack">' +
+              '<span class="token-chip mono" title="' + escapeHTML(account.access_token_preview || '') + '">' + escapeHTML(tokenPreview) + '</span>' +
+              '<span class="meta-tag' + (account.has_refresh_token ? ' on' : '') + '">' + escapeHTML(refresh) + '</span>' +
+            '</div>' +
+          '</td>' +
+          '<td data-label="' + escapeHTML(t('columnRoute')) + '">' +
+            '<div class="cell-stack">' +
+              '<span class="route-chip mono" title="' + escapeHTML(account.device_id || '') + '">' + escapeHTML(device) + '</span>' +
+              '<span class="cell-meta" title="' + escapeHTML(account.proxy_preview || t('proxyDirect')) + '">' + escapeHTML(route) + '</span>' +
+            '</div>' +
+          '</td>' +
+          '<td data-label="' + escapeHTML(t('columnStatus')) + '">' +
+            '<span class="badge ' + statusClass + '">' + escapeHTML(account.available ? t('availableBadge') : t('disabledBadge')) + '</span>' +
+          '</td>' +
+          '<td data-label="' + escapeHTML(t('columnExpiry')) + '">' +
+            '<span class="meta-tag ' + escapeHTML(expiry.className) + '" title="' + escapeHTML(expiry.title) + '">' + escapeHTML(expiry.text) + '</span>' +
+          '</td>' +
+          '<td data-label="' + escapeHTML(t('columnLastUsed')) + '">' +
+            '<span class="time-main">' + escapeHTML(formatDate(account.last_used_at)) + '</span>' +
+          '</td>' +
+          '<td data-label="' + escapeHTML(t('columnActions')) + '">' +
+            '<div class="actions">' +
+              '<button type="button" class="btn btn-small" data-action="check" data-id="' + account.id + '">' + escapeHTML(t('check')) + '</button>' +
+              '<button type="button" class="btn btn-small" data-action="edit" data-id="' + account.id + '">' + escapeHTML(t('edit')) + '</button>' +
+              '<button type="button" class="btn btn-small" data-action="toggle" data-id="' + account.id + '">' + escapeHTML(account.available ? t('disable') : t('enable')) + '</button>' +
+              '<button type="button" class="btn btn-small btn-danger" data-action="delete" data-id="' + account.id + '">' + escapeHTML(t('delete')) + '</button>' +
+            '</div>' +
+          '</td>' +
+        '</tr>';
+      }
+
+      function openAccountDialog(account) {
+        var editing = !!(account && account.id);
+        editingID = editing ? account.id : 0;
+        form.reset();
+        emailInput.value = editing ? (account.email || '') : '';
+        statusInput.value = editing ? (account.available ? '正常' : '禁用') : '正常';
+        deviceIDInput.value = editing ? (account.device_id || '') : '';
+        accessTokenInput.required = !editing;
+        resetClearActions();
+        formMessage.textContent = '';
+        updateDialogCopy(editing ? account : null);
+        dialog.showModal();
+        setTimeout(function () { emailInput.focus(); }, 50);
+      }
+
+      function openCreateDialog() {
+        openAccountDialog(null);
+      }
+
+      function openEditDialog(account) {
+        openAccountDialog(account);
+      }
+
+      function updateDialogCopy(account) {
+        account = account || accounts.find(function (item) { return item.id === editingID; }) || null;
+        var editing = editingID > 0;
+        dialogTitle.textContent = t(editing ? 'editTitle' : 'createTitle');
+        saveButton.textContent = t('save');
+        accessTokenInput.placeholder = '';
+        refreshTokenInput.placeholder = '';
+        proxyInput.placeholder = 'http://user:pass@host:port';
+        if (editing) {
+          accessTokenHint.textContent = t('accessKeep', {
+            preview: account && account.access_token_preview ? account.access_token_preview : '••••••'
+          });
+          refreshTokenHint.textContent = account && account.has_refresh_token
+            ? t('refreshConfigured')
+            : t('refreshEmpty');
+          proxyHint.textContent = account && account.has_proxy
+            ? t('proxyConfigured', { preview: account.proxy_preview })
+            : t('proxyEmpty');
+        } else {
+          accessTokenHint.textContent = t('accessRequired');
+          refreshTokenHint.textContent = t('refreshHint');
+          proxyHint.textContent = t('proxyHint');
+        }
+      }
+
+      function clearSecretInputs() {
+        accessTokenInput.value = '';
+        refreshTokenInput.value = '';
+        deviceIDInput.value = '';
+        proxyInput.value = '';
+        resetClearActions();
+      }
+
+      async function saveAccount(event) {
+        event.preventDefault();
+        formMessage.textContent = '';
+        var accessToken = accessTokenInput.value.trim();
+        if (!editingID && !accessToken) {
+          formMessage.textContent = t('accessRequired');
+          accessTokenInput.focus();
+          return;
+        }
+        if (editingID && clearAccessActive && !accessToken) {
+          formMessage.textContent = t('accessRequired');
+          accessTokenInput.focus();
+          return;
+        }
+        var payload = {
+          email: emailInput.value.trim(),
+          device_id: deviceIDInput.value.trim(),
+          status: statusInput.value,
+          disabled: statusInput.value === '禁用'
+        };
+        // access_token cannot be empty on the server; omit when blank to keep existing.
+        if (accessToken) payload.access_token = accessToken;
+        if (refreshTokenInput.value) payload.refresh_token = refreshTokenInput.value;
+        else if (editingID && clearRefreshActive) payload.refresh_token = '';
+        if (proxyInput.value.trim()) payload.proxy = proxyInput.value.trim();
+        else if (editingID && clearProxyActive) payload.proxy = '';
+
+        saveButton.disabled = true;
+        saveButton.textContent = t('saving');
+        try {
+          await apiFetch(editingID ? '/api/accounts/' + editingID : '/api/accounts', {
+            method: editingID ? 'PUT' : 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          dialog.close();
+          showToast(t('saved'));
+          await loadAccounts(false);
+        } catch (error) {
+          formMessage.textContent = error.message;
+        } finally {
+          saveButton.disabled = false;
+          saveButton.textContent = t('save');
+        }
+      }
+
+      async function toggleAccount(account) {
+        var enable = !account.available;
+        try {
+          await apiFetch('/api/accounts/' + account.id, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              email: account.email,
+              device_id: account.device_id,
+              status: enable ? '正常' : '禁用',
+              disabled: !enable
+            })
+          });
+          showToast(t(enable ? 'enabledToast' : 'disabledToast'));
+          await loadAccounts(false);
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      function formatProbeMessage(probe) {
+        var code = probe.status_code || 0;
+        var detail = String(probe.detail || '').trim();
+        if (probe.status === 'alive') {
+          return { message: t('probeAlive', { code: code }), sticky: false };
+        }
+        if (probe.status === 'unauthorized') {
+          return { message: t('probeUnauthorized', { code: code }), sticky: false };
+        }
+        var lower = detail.toLowerCase();
+        if (lower.indexOf('timeout') >= 0 || lower.indexOf('deadline exceeded') >= 0) {
+          if (lower.indexOf('direct connection') >= 0 || lower.indexOf('set this account') >= 0) {
+            return { message: t('probeTimeoutDirect'), sticky: true };
+          }
+          if (lower.indexOf('account proxy') >= 0 || lower.indexOf('via account proxy') >= 0) {
+            return { message: t('probeTimeoutProxy'), sticky: true };
+          }
+        }
+        return {
+          message: t('probeUnknown', { code: code || '—', detail: detail || probe.status || 'unknown' }),
+          sticky: !!detail
+        };
+      }
+
+      async function checkAccount(account, button) {
+        if (button) {
+          button.disabled = true;
+          button.textContent = t('checking');
+        }
+        try {
+          var data = await apiFetch('/api/accounts/' + account.id + '/check', { method: 'POST' });
+          var probe = data.probe || {};
+          var formatted = formatProbeMessage(probe);
+          showToast(formatted.message, formatted.sticky ? 8000 : 3200);
+          await loadAccounts(false);
+        } catch (error) {
+          showToast(t('probeNetwork', { detail: error.message }), 8000);
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = t('check');
+          }
+        }
+      }
+
+      async function deleteAccount(account) {
+        if (!window.confirm(t('confirmDelete', { name: accountName(account) }))) return;
+        try {
+          await apiFetch('/api/accounts/' + account.id, { method: 'DELETE' });
+          showToast(t('deleted'));
+          await loadAccounts(false);
+        } catch (error) {
+          showToast(error.message);
+        }
+      }
+
+      function showToast(message, durationMs) {
+        clearTimeout(toastTimer);
+        toastElement.textContent = message;
+        toastElement.classList.add('show');
+        var ms = typeof durationMs === 'number' && durationMs > 0 ? durationMs : 2400;
+        toastTimer = setTimeout(function () { toastElement.classList.remove('show'); }, ms);
+      }
+
+      document.getElementById('addAccountButton').onclick = openCreateDialog;
+      document.getElementById('refreshButton').onclick = function () { loadAccounts(true); };
+      document.getElementById('dialogClose').onclick = function () { dialog.close(); };
+      document.getElementById('cancelButton').onclick = function () { dialog.close(); };
+      bindClearAction(
+        clearAccessToken,
+        function () { return clearAccessActive; },
+        function (v) { clearAccessActive = v; },
+        accessTokenInput,
+        'clearAccess',
+        'clearAccessDone'
+      );
+      bindClearAction(
+        clearRefreshToken,
+        function () { return clearRefreshActive; },
+        function (v) { clearRefreshActive = v; },
+        refreshTokenInput,
+        'clearRefresh',
+        'clearRefreshDone'
+      );
+      bindClearAction(
+        clearDeviceID,
+        function () { return clearDeviceActive; },
+        function (v) { clearDeviceActive = v; },
+        deviceIDInput,
+        'clearDevice',
+        'clearDeviceDone'
+      );
+      bindClearAction(
+        clearProxy,
+        function () { return clearProxyActive; },
+        function (v) { clearProxyActive = v; },
+        proxyInput,
+        'clearProxy',
+        'clearProxyDone'
+      );
+      document.getElementById('logoutButton').onclick = async function () {
+        try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
+        finally { window.location.replace('/login'); }
+      };
+      form.addEventListener('submit', saveAccount);
+      searchInput.addEventListener('input', render);
+      rows.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-action]');
+        if (!button) return;
+        var id = Number(button.getAttribute('data-id'));
+        var account = accounts.find(function (item) { return item.id === id; });
+        if (!account) return;
+        var action = button.getAttribute('data-action');
+        if (action === 'check') checkAccount(account, button);
+        if (action === 'edit') openEditDialog(account);
+        if (action === 'toggle') toggleAccount(account);
+        if (action === 'delete') deleteAccount(account);
+      });
+      dialog.addEventListener('click', function (event) {
+        if (event.target === dialog) dialog.close();
+      });
+      dialog.addEventListener('close', clearSecretInputs);
+      var btnUiLocale = document.getElementById('btnUiLocale');
+      var btnUiTheme = document.getElementById('btnUiTheme');
+      if (btnUiLocale) {
+        btnUiLocale.onclick = function () {
+          applyLocale(locale === 'en' ? 'zh' : 'en');
+        };
+      }
+      if (btnUiTheme) {
+        btnUiTheme.onclick = function () {
+          applyTheme(theme === 'dark' ? 'light' : 'dark', true);
+        };
+      }
+
+      try { locale = localStorage.getItem(localeKey) || 'zh'; } catch (_) {}
+      try {
+        var savedTheme = localStorage.getItem(themeKey);
+        if (savedTheme === 'light' || savedTheme === 'dark') theme = savedTheme;
+        else theme = document.documentElement.getAttribute('data-theme') || 'light';
+      } catch (_) {
+        theme = document.documentElement.getAttribute('data-theme') || 'light';
+      }
+      applyTheme(theme, false);
+      applyLocale(locale);
+      loadAccounts(false);
+    })();
+  </script>
+</body>
+</html>
