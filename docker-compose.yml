@@ -4,7 +4,7 @@ services:
     pull_policy: always
     container_name: chatgpt-web-voice
     network_mode: host
-    mem_limit: 128m
+    mem_limit: 256m
     environment:
       VOICE_AUTH_USERNAME: ""
       VOICE_AUTH_PASSWORD: ""
