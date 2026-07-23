@@ -83,12 +83,18 @@ func Run() error {
 	}
 	logger.Info("account_database_ready", "available_accounts", available)
 
-	authManager := auth.New(
+	authManager := auth.NewWithLimits(
 		cfg.AuthUsername,
 		cfg.AuthPassword,
 		time.Duration(cfg.AuthSessionTTL)*time.Second,
+		auth.Limits{
+			MaxFailures:  cfg.LoginMaxFailures,
+			Window:       time.Duration(cfg.LoginWindowSeconds) * time.Second,
+			Lockout:      time.Duration(cfg.LoginLockoutSeconds) * time.Second,
+			FailureDelay: 200 * time.Millisecond,
+		},
 		logger,
-	)
+	).WithSessionStore(auth.NewSessionStore(db))
 	apiKeyManager := auth.NewAPIKeyManager(apiKeyStore, logger)
 	voiceService := voice.New(cfg, accountPool, logger).WithCallSessions(callSessionStore)
 	apiServer := api.New(api.Dependencies{

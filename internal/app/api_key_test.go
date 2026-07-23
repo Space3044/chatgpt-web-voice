@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"net/http"
@@ -71,8 +72,25 @@ func TestAPIKeyRoutesAreIsolatedFromAdministratorRoutes(t *testing.T) {
 		t.Fatalf("API key accessed administrator route: status=%d body=%s", adminResp.Code, adminResp.Body.String())
 	}
 
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{"username":"admin","password":"password"}`))
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp := httptest.NewRecorder()
+	handler.ServeHTTP(loginResp, loginReq)
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("admin login status=%d body=%s", loginResp.Code, loginResp.Body.String())
+	}
+	var sessionCookie *http.Cookie
+	for _, c := range loginResp.Result().Cookies() {
+		if c.Name == "voice_gateway_session" {
+			sessionCookie = c
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatalf("missing session cookie: %+v", loginResp.Result().Cookies())
+	}
+
 	keysPageReq := httptest.NewRequest(http.MethodGet, "/keys", nil)
-	keysPageReq.SetBasicAuth("admin", "password")
+	keysPageReq.AddCookie(sessionCookie)
 	keysPageResp := httptest.NewRecorder()
 	handler.ServeHTTP(keysPageResp, keysPageReq)
 	if keysPageResp.Code != http.StatusOK {

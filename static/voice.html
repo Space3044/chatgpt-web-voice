@@ -1537,6 +1537,26 @@
 <script>
 (function () {
   'use strict';
+  function readCSRFToken() {
+    try {
+      var part = (document.cookie || '').split(';').map(function (item) { return item.trim(); }).filter(function (item) {
+        return item.indexOf('voice_gateway_csrf=') === 0;
+      })[0] || '';
+      if (!part) return '';
+      return decodeURIComponent(part.split('=').slice(1).join('='));
+    } catch (e) {
+      return '';
+    }
+  }
+  function withCSRFHeaders(headers) {
+    headers = headers || {};
+    var token = readCSRFToken();
+    if (token && !headers['X-CSRF-Token'] && !headers['x-csrf-token']) headers['X-CSRF-Token'] = token;
+    return headers;
+  }
+  window.readCSRFToken = readCSRFToken;
+  window.withCSRFHeaders = withCSRFHeaders;
+
 
   var orb = document.getElementById('orb');
   var statusText = document.getElementById('statusText');
@@ -3927,6 +3947,11 @@
   async function gatewayFetch(url, options) {
     options = options || {};
     options.credentials = 'same-origin';
+    options.headers = options.headers || {};
+    var method = String(options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+      options.headers = withCSRFHeaders(options.headers);
+    }
     var response = await fetch(url, options);
     if (response.status === 401) {
       window.location.replace('/login');
@@ -3962,19 +3987,10 @@
   function releaseOnPageExit() {
     if (!(inCall || starting) || !voiceSessionId) return;
     try {
-      if (navigator.sendBeacon) {
-        var payload = new Blob(
-          [JSON.stringify({ voice_session_id: voiceSessionId })],
-          { type: 'application/json' }
-        );
-        if (navigator.sendBeacon('/api/voice/session/release', payload)) return;
-      }
-    } catch (e) {}
-    try {
       fetch('/api/voice/session/release', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
+        headers: withCSRFHeaders({ 'content-type': 'application/json' }),
         body: JSON.stringify({ voice_session_id: voiceSessionId }),
         keepalive: true
       });
@@ -4728,7 +4744,7 @@
     btnLogout.onclick = async function () {
       try {
         await stopCall(false);
-        await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: withCSRFHeaders({}) });
       } finally {
         window.location.replace('/login');
       }

@@ -3,7 +3,7 @@ package config
 import "testing"
 
 func TestValidateRequiresUsernameAndPassword(t *testing.T) {
-	cfg := Config{Environment: EnvironmentDevelopment, DatabaseFile: "voice.db", AuthSessionTTL: 60, LogFormat: "json", LogLevel: "info"}
+	cfg := Config{Environment: EnvironmentDevelopment, DatabaseFile: "voice.db", AuthSessionTTL: 60, LoginMaxFailures: 8, LoginWindowSeconds: 900, LoginLockoutSeconds: 900, LogFormat: "json", LogLevel: "info"}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected missing username to fail validation")
 	}
@@ -74,14 +74,17 @@ func TestLoadVerifiesTLSByDefaultInDevelopment(t *testing.T) {
 
 func TestValidateRejectsUnknownEnvironment(t *testing.T) {
 	cfg := Config{
-		Environment:        "staging",
-		AuthUsername:       "admin",
-		AuthPassword:       "secret",
-		TokenEncryptionKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		DatabaseFile:       "voice.db",
-		AuthSessionTTL:     60,
-		LogFormat:          "json",
-		LogLevel:           "info",
+		Environment:         "staging",
+		AuthUsername:        "admin",
+		AuthPassword:        "secret",
+		TokenEncryptionKey:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		DatabaseFile:        "voice.db",
+		AuthSessionTTL:      60,
+		LoginMaxFailures:    8,
+		LoginWindowSeconds:  900,
+		LoginLockoutSeconds: 900,
+		LogFormat:           "json",
+		LogLevel:            "info",
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected unknown environment to fail validation")
@@ -100,5 +103,30 @@ func TestLoadPreservesPasswordWhitespace(t *testing.T) {
 	}
 	if cfg.AuthPassword != " password with spaces " {
 		t.Fatalf("password whitespace was changed: %q", cfg.AuthPassword)
+	}
+}
+
+
+func TestValidateProductionForbidsSkipSSLVerify(t *testing.T) {
+	cfg := Config{
+		Environment:         EnvironmentProduction,
+		AuthUsername:        "admin",
+		AuthPassword:        "secret",
+		TokenEncryptionKey:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		DatabaseFile:        "voice.db",
+		AuthSessionTTL:      60,
+		LoginMaxFailures:    8,
+		LoginWindowSeconds:  900,
+		LoginLockoutSeconds: 900,
+		SkipSSLVerify:       true,
+		LogFormat:           "json",
+		LogLevel:            "info",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected production skip ssl verify to fail")
+	}
+	cfg.SkipSSLVerify = false
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected production config without skip-verify to pass: %v", err)
 	}
 }

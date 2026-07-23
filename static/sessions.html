@@ -11,6 +11,26 @@
   <link rel="stylesheet" href="/static/app.css" />
   <script>
     (function () {
+      function readCSRFToken() {
+        try {
+          var part = (document.cookie || '').split(';').map(function (item) { return item.trim(); }).filter(function (item) {
+            return item.indexOf('voice_gateway_csrf=') === 0;
+          })[0] || '';
+          if (!part) return '';
+          return decodeURIComponent(part.split('=').slice(1).join('='));
+        } catch (e) {
+          return '';
+        }
+      }
+      function withCSRFHeaders(headers) {
+        headers = headers || {};
+        var token = readCSRFToken();
+        if (token && !headers['X-CSRF-Token'] && !headers['x-csrf-token']) headers['X-CSRF-Token'] = token;
+        return headers;
+      }
+      window.readCSRFToken = readCSRFToken;
+      window.withCSRFHeaders = withCSRFHeaders;
+
       try {
         var theme = localStorage.getItem('chatgpt_web_voice_theme_v1');
         if (theme !== 'light' && theme !== 'dark') theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -160,6 +180,20 @@
       async function apiFetch(url, options) {
         options = options || {};
         options.credentials = 'same-origin';
+        options.headers = options.headers || {};
+        var method = String(options.method || 'GET').toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+          if (!options.headers['X-CSRF-Token'] && !options.headers['x-csrf-token']) {
+            var csrf = '';
+            try {
+              csrf = (document.cookie || '').split(';').map(function (part) { return part.trim(); }).filter(function (part) {
+                return part.indexOf('voice_gateway_csrf=') === 0;
+              })[0] || '';
+              if (csrf) csrf = decodeURIComponent(csrf.split('=').slice(1).join('='));
+            } catch (e) {}
+            if (csrf) options.headers['X-CSRF-Token'] = csrf;
+          }
+        }
         var response = await fetch(url, options);
         var data = null;
         try { data = await response.json(); } catch (e) {}
@@ -302,7 +336,7 @@
 
       document.getElementById('logoutButton').addEventListener('click', async function () {
         try {
-          await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', headers: withCSRFHeaders({}) });
         } catch (e) {}
         window.location.replace('/login');
       });

@@ -22,6 +22,9 @@ type Config struct {
 	AuthUsername          string
 	AuthPassword          string
 	AuthSessionTTL        int
+	LoginMaxFailures      int
+	LoginLockoutSeconds   int
+	LoginWindowSeconds    int
 	TokenEncryptionKey    string
 	Impersonate           string
 	SkipSSLVerify         bool
@@ -101,6 +104,9 @@ func Load() Config {
 		AuthUsername:       env("VOICE_AUTH_USERNAME", ""),
 		AuthPassword:       envRaw("VOICE_AUTH_PASSWORD", ""),
 		AuthSessionTTL:     envInt("VOICE_AUTH_SESSION_TTL_SECONDS", 12*60*60),
+		LoginMaxFailures:   envInt("VOICE_LOGIN_MAX_FAILURES", 8),
+		LoginWindowSeconds: envInt("VOICE_LOGIN_WINDOW_SECONDS", 15*60),
+		LoginLockoutSeconds: envInt("VOICE_LOGIN_LOCKOUT_SECONDS", 15*60),
 		TokenEncryptionKey: envRaw("VOICE_TOKEN_ENCRYPTION_KEY", ""),
 		Impersonate:        env("VOICE_IMPERSONATE", "chrome136"),
 		SkipSSLVerify:      skipSSLVerify,
@@ -141,8 +147,20 @@ func (c Config) Validate() error {
 	if c.AuthSessionTTL < 1 {
 		return fmt.Errorf("VOICE_AUTH_SESSION_TTL_SECONDS must be greater than zero")
 	}
+	if c.LoginMaxFailures < 1 {
+		return fmt.Errorf("VOICE_LOGIN_MAX_FAILURES must be greater than zero")
+	}
+	if c.LoginWindowSeconds < 1 {
+		return fmt.Errorf("VOICE_LOGIN_WINDOW_SECONDS must be greater than zero")
+	}
+	if c.LoginLockoutSeconds < 1 {
+		return fmt.Errorf("VOICE_LOGIN_LOCKOUT_SECONDS must be greater than zero")
+	}
 	if strings.TrimSpace(c.DatabaseFile) == "" {
 		return fmt.Errorf("VOICE_DATABASE_FILE is required")
+	}
+	if strings.EqualFold(strings.TrimSpace(c.Environment), EnvironmentProduction) && c.SkipSSLVerify {
+		return fmt.Errorf("production forbids VOICE_SKIP_SSL_VERIFY=true")
 	}
 	format := strings.ToLower(strings.TrimSpace(c.LogFormat))
 	if format != "json" && format != "text" {
@@ -154,3 +172,4 @@ func (c Config) Validate() error {
 	}
 	return nil
 }
+
