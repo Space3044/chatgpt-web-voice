@@ -1,8 +1,8 @@
 package accounts
 
-// Account is one ChatGPT web access token entry. Values are intentionally
-// stored as plain text in the local SQLite database, as required by the
-// gateway deployment model.
+// Account is one ChatGPT web access token entry. The access token is sealed
+// with AES-256-GCM before it is written to SQLite; domain code always sees
+// the plaintext form after decryption.
 type Account struct {
 	ID          int64   `json:"id,omitempty"`
 	Email       string  `json:"email"`

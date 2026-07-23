@@ -1,13 +1,33 @@
 package accounts
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/secretbox"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/store"
+
+	_ "modernc.org/sqlite"
 )
 
 func stringPointer(value string) *string { return &value }
+
+func testBox(t *testing.T) *secretbox.Box {
+	t.Helper()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 3)
+	}
+	box, err := secretbox.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return box
+}
 
 func newTestPool(t *testing.T) *Pool {
 	t.Helper()
@@ -15,6 +35,7 @@ func newTestPool(t *testing.T) *Pool {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pool.WithBox(testBox(t))
 	t.Cleanup(func() { _ = pool.Close() })
 	return pool
 }
@@ -57,10 +78,12 @@ func TestPickSkipsDisabledAndRotatesAccounts(t *testing.T) {
 
 func TestMarkInvalidPersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "voice.db")
+	box := testBox(t)
 	pool, err := NewPool(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	pool.WithBox(box)
 	if err := pool.Upsert(Account{Email: "a@x.com", AccessToken: "t1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -75,6 +98,7 @@ func TestMarkInvalidPersists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pool.WithBox(box)
 	defer pool.Close()
 	if _, _, err := pool.Pick("", nil); err == nil {
 		t.Fatal("expected disabled account to remain unavailable after reopen")
@@ -85,6 +109,99 @@ func TestMarkInvalidPersists(t *testing.T) {
 	}
 	if len(items) != 1 || !items[0].Disabled || items[0].Status != "禁用" || items[0].InvalidAt == 0 {
 		t.Fatalf("invalid persisted state: %+v", items)
+	}
+}
+
+func TestAccessTokensAreSealedAtRest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "voice.db")
+	pool, err := NewPool(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool.WithBox(testBox(t))
+	defer pool.Close()
+
+	const token = "access-token-plaintext-value"
+	if _, err := pool.Create(Account{Email: "a@x.com", AccessToken: token}); err != nil {
+		t.Fatal(err)
+	}
+	var stored string
+	if err := pool.DB().Conn().QueryRow("SELECT access_token FROM accounts LIMIT 1").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored == token || !secretbox.IsSealed(stored) {
+		t.Fatalf("expected sealed access_token in sqlite, got %q", stored)
+	}
+	items, err := pool.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].AccessToken != token {
+		t.Fatalf("domain layer should decrypt token: %+v", items)
+	}
+}
+
+func TestSealStoredTokensMigratesLegacyPlaintext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "voice.db")
+	// Simulate a pre-encryption database row.
+	conn, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(`
+		CREATE TABLE accounts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL DEFAULT '',
+			access_token TEXT NOT NULL UNIQUE,
+			device_id TEXT NOT NULL DEFAULT '',
+			proxy TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '正常',
+			disabled INTEGER NOT NULL DEFAULT 0,
+			invalid_at REAL NOT NULL DEFAULT 0,
+			last_used_at TEXT,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		INSERT INTO accounts (email, access_token, status) VALUES ('a@x.com', 'legacy-plain-token', '正常');
+	`); err != nil {
+		_ = conn.Close()
+		t.Fatal(err)
+	}
+	_ = conn.Close()
+
+	db, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	pool := NewPoolFromDB(db).WithBox(testBox(t))
+	rewritten, err := pool.SealStoredTokens()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rewritten != 1 {
+		t.Fatalf("rewritten=%d want 1", rewritten)
+	}
+	var stored, hash string
+	if err := db.Conn().QueryRow("SELECT access_token, token_hash FROM accounts WHERE id = 1").Scan(&stored, &hash); err != nil {
+		t.Fatal(err)
+	}
+	if !secretbox.IsSealed(stored) || strings.Contains(stored, "legacy-plain-token") {
+		t.Fatalf("token still plaintext: %q", stored)
+	}
+	if hash == "" {
+		t.Fatal("token_hash should be filled after sealing")
+	}
+	items, err := pool.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].AccessToken != "legacy-plain-token" {
+		t.Fatalf("unexpected decrypted account: %+v", items)
+	}
+	token, _, err := pool.Pick("legacy-plain-token", nil)
+	if err != nil || token != "legacy-plain-token" {
+		t.Fatalf("preferred pick after seal: token=%q err=%v", token, err)
 	}
 }
 

@@ -12,6 +12,10 @@ func TestValidateRequiresUsernameAndPassword(t *testing.T) {
 		t.Fatal("expected missing password to fail validation")
 	}
 	cfg.AuthPassword = "secret"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected missing token encryption key to fail validation")
+	}
+	cfg.TokenEncryptionKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected valid auth configuration: %v", err)
 	}
@@ -70,13 +74,14 @@ func TestLoadVerifiesTLSByDefaultInDevelopment(t *testing.T) {
 
 func TestValidateRejectsUnknownEnvironment(t *testing.T) {
 	cfg := Config{
-		Environment:    "staging",
-		AuthUsername:   "admin",
-		AuthPassword:   "secret",
-		DatabaseFile:   "voice.db",
-		AuthSessionTTL: 60,
-		LogFormat:      "json",
-		LogLevel:       "info",
+		Environment:        "staging",
+		AuthUsername:       "admin",
+		AuthPassword:       "secret",
+		TokenEncryptionKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		DatabaseFile:       "voice.db",
+		AuthSessionTTL:     60,
+		LogFormat:          "json",
+		LogLevel:           "info",
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected unknown environment to fail validation")

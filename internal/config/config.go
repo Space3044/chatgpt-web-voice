@@ -19,23 +19,24 @@ type Config struct {
 	DataDir            string
 	StaticDir          string
 	DatabaseFile       string
-	AuthUsername       string
-	AuthPassword       string
-	AuthSessionTTL     int
-	Impersonate        string
-	SkipSSLVerify      bool
-	SessionTTLSeconds  int
-	MaxAccountAttempts int
-	DefaultUA          string
-	ClientVersion      string
-	ClientBuildNumber  string
-	ListenAddr         string
-	TLS                bool
-	TLSCertFile        string
-	TLSKeyFile         string
-	TLSCertDir         string
-	LogFormat          string
-	LogLevel           string
+	AuthUsername          string
+	AuthPassword          string
+	AuthSessionTTL        int
+	TokenEncryptionKey    string
+	Impersonate           string
+	SkipSSLVerify         bool
+	SessionTTLSeconds     int
+	MaxAccountAttempts    int
+	DefaultUA             string
+	ClientVersion         string
+	ClientBuildNumber     string
+	ListenAddr            string
+	TLS                   bool
+	TLSCertFile           string
+	TLSKeyFile            string
+	TLSCertDir            string
+	LogFormat             string
+	LogLevel              string
 }
 
 func env(name, def string) string {
@@ -100,6 +101,7 @@ func Load() Config {
 		AuthUsername:       env("VOICE_AUTH_USERNAME", ""),
 		AuthPassword:       envRaw("VOICE_AUTH_PASSWORD", ""),
 		AuthSessionTTL:     envInt("VOICE_AUTH_SESSION_TTL_SECONDS", 12*60*60),
+		TokenEncryptionKey: envRaw("VOICE_TOKEN_ENCRYPTION_KEY", ""),
 		Impersonate:        env("VOICE_IMPERSONATE", "chrome136"),
 		SkipSSLVerify:      skipSSLVerify,
 		SessionTTLSeconds:  envInt("VOICE_SESSION_TTL_SECONDS", 6*60*60),
@@ -132,6 +134,9 @@ func (c Config) Validate() error {
 	}
 	if c.AuthPassword == "" {
 		return fmt.Errorf("VOICE_AUTH_PASSWORD is required")
+	}
+	if strings.TrimSpace(c.TokenEncryptionKey) == "" {
+		return fmt.Errorf("VOICE_TOKEN_ENCRYPTION_KEY is required (32-byte hex or base64 key for sealing access tokens)")
 	}
 	if c.AuthSessionTTL < 1 {
 		return fmt.Errorf("VOICE_AUTH_SESSION_TTL_SECONDS must be greater than zero")

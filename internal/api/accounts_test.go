@@ -15,9 +15,23 @@ import (
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/accounts"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/config"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/conversations"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/secretbox"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/store"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/voice"
 )
+
+func testAccountBox(t *testing.T) *secretbox.Box {
+	t.Helper()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 11)
+	}
+	box, err := secretbox.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return box
+}
 
 func newAPITestServer(t *testing.T) (*accounts.Pool, *http.ServeMux) {
 	t.Helper()
@@ -26,7 +40,7 @@ func newAPITestServer(t *testing.T) (*accounts.Pool, *http.ServeMux) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	pool := accounts.NewPoolFromDB(db)
+	pool := accounts.NewPoolFromDB(db).WithBox(testAccountBox(t))
 	mux := http.NewServeMux()
 	New(Dependencies{
 		Accounts:      pool,
@@ -177,7 +191,7 @@ func TestAccountCheckRouteRequiresExistingAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	pool := accounts.NewPoolFromDB(db)
+	pool := accounts.NewPoolFromDB(db).WithBox(testAccountBox(t))
 	svc := voice.New(config.Config{}, pool, nil)
 	mux := http.NewServeMux()
 	New(Dependencies{

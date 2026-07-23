@@ -7,22 +7,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/secretbox"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/store"
 )
 
 const accountSelectColumns = `
-	id, email, access_token, device_id, proxy, status, disabled, invalid_at,
+	id, email, access_token, token_hash, device_id, proxy, status, disabled, invalid_at,
 	COALESCE(last_used_at, ''), created_at, updated_at`
 
 // Pool is the SQLite-backed account repository. Selection and invalidation are
-// serialized through the shared store mutex.
+// serialized through the shared store mutex. Access tokens are sealed at rest
+// when a secretbox.Box is configured.
 type Pool struct {
 	db     *store.DB
+	box    *secretbox.Box
 	ownsDB bool
 }
 
 // NewPool opens a SQLite database and returns an account pool. Prefer
 // NewPoolFromDB when multiple domain repositories share one connection.
+// Encryption is optional only for unit tests that call NewPool without a box;
+// production always supplies a box via NewPoolFromDB.
 func NewPool(path string) (*Pool, error) {
 	db, err := store.Open(path)
 	if err != nil {
@@ -35,6 +40,15 @@ func NewPool(path string) (*Pool, error) {
 // database lifetime and should close store.DB itself.
 func NewPoolFromDB(db *store.DB) *Pool {
 	return &Pool{db: db, ownsDB: false}
+}
+
+// WithBox configures at-rest sealing for access tokens. Call once during
+// composition-root setup, then SealStoredTokens to migrate legacy plaintext.
+func (p *Pool) WithBox(box *secretbox.Box) *Pool {
+	if p != nil {
+		p.box = box
+	}
+	return p
 }
 
 // Close releases the underlying SQLite connection when this pool owns it.
@@ -54,6 +68,65 @@ func (p *Pool) DB() *store.DB {
 	return p.db
 }
 
+// SealStoredTokens re-seals any legacy plaintext access_token rows and fills
+// missing token_hash digests. Safe to call on every startup.
+func (p *Pool) SealStoredTokens() (rewritten int, err error) {
+	if p == nil || p.box == nil {
+		return 0, nil
+	}
+	p.db.Lock()
+	defer p.db.Unlock()
+	rows, err := p.db.Conn().Query("SELECT id, access_token, token_hash FROM accounts")
+	if err != nil {
+		return 0, fmt.Errorf("list accounts for sealing: %w", err)
+	}
+	defer rows.Close()
+
+	type row struct {
+		id     int64
+		stored string
+		hash   string
+	}
+	var pending []row
+	for rows.Next() {
+		var item row
+		if err := rows.Scan(&item.id, &item.stored, &item.hash); err != nil {
+			return 0, fmt.Errorf("read account for sealing: %w", err)
+		}
+		pending = append(pending, item)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate accounts for sealing: %w", err)
+	}
+
+	for _, item := range pending {
+		plain, err := p.box.Open(item.stored)
+		if err != nil {
+			return rewritten, fmt.Errorf("open account %d access token: %w", item.id, err)
+		}
+		hash := p.box.Hash(plain)
+		sealed := item.stored
+		needsSeal := !secretbox.IsSealed(item.stored)
+		if needsSeal {
+			sealed, err = p.box.Seal(plain)
+			if err != nil {
+				return rewritten, fmt.Errorf("seal account %d access token: %w", item.id, err)
+			}
+		}
+		if !needsSeal && item.hash == hash {
+			continue
+		}
+		if _, err := p.db.Conn().Exec(
+			`UPDATE accounts SET access_token = ?, token_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+			sealed, hash, item.id,
+		); err != nil {
+			return rewritten, fmt.Errorf("persist sealed account %d: %w", item.id, err)
+		}
+		rewritten++
+	}
+	return rewritten, nil
+}
+
 // List returns all accounts without exposing database handles to callers.
 func (p *Pool) List() ([]Account, error) {
 	p.db.Lock()
@@ -66,7 +139,7 @@ func (p *Pool) List() ([]Account, error) {
 
 	var result []Account
 	for rows.Next() {
-		account, err := scanAccount(rows)
+		account, err := p.scanAccount(rows)
 		if err != nil {
 			return nil, fmt.Errorf("read account: %w", err)
 		}
@@ -91,18 +164,22 @@ func (p *Pool) Create(account Account) (Account, error) {
 	if account.AccessToken == "" {
 		return Account{}, &Error{Message: "access_token is required"}
 	}
+	stored, hash, err := p.sealToken(account.AccessToken)
+	if err != nil {
+		return Account{}, err
+	}
 	p.db.Lock()
 	defer p.db.Unlock()
-	if exists, err := p.tokenExistsUnlocked(account.AccessToken, 0); err != nil {
+	if exists, err := p.tokenHashExistsUnlocked(hash, 0); err != nil {
 		return Account{}, err
 	} else if exists {
 		return Account{}, fmt.Errorf("%w: access_token already exists", ErrConflict)
 	}
 	result, err := p.db.Conn().Exec(`
 		INSERT INTO accounts
-			(email, access_token, device_id, proxy, status, disabled, invalid_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		account.Email, account.AccessToken, account.DeviceID,
+			(email, access_token, token_hash, device_id, proxy, status, disabled, invalid_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		account.Email, stored, hash, account.DeviceID,
 		account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
 	if err != nil {
 		return Account{}, fmt.Errorf("create account: %w", err)
@@ -129,7 +206,11 @@ func (p *Pool) Update(id int64, update AccountUpdate) (Account, error) {
 	if current.AccessToken == "" {
 		return Account{}, &Error{Message: "access_token is required"}
 	}
-	if exists, err := p.tokenExistsUnlocked(current.AccessToken, id); err != nil {
+	stored, hash, err := p.sealToken(current.AccessToken)
+	if err != nil {
+		return Account{}, err
+	}
+	if exists, err := p.tokenHashExistsUnlocked(hash, id); err != nil {
 		return Account{}, err
 	} else if exists {
 		return Account{}, fmt.Errorf("%w: access_token already exists", ErrConflict)
@@ -153,10 +234,10 @@ func (p *Pool) Update(id int64, update AccountUpdate) (Account, error) {
 	}
 	_, err = p.db.Conn().Exec(`
 		UPDATE accounts SET
-			email = ?, access_token = ?, device_id = ?, proxy = ?,
+			email = ?, access_token = ?, token_hash = ?, device_id = ?, proxy = ?,
 			status = ?, disabled = ?, invalid_at = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`,
-		current.Email, current.AccessToken, current.DeviceID,
+		current.Email, stored, hash, current.DeviceID,
 		current.Proxy, current.Status, boolInt(current.Disabled), invalidAt, id)
 	if err != nil {
 		return Account{}, fmt.Errorf("update account: %w", err)
@@ -204,26 +285,44 @@ func (p *Pool) Upsert(account Account) error {
 	if account.AccessToken == "" {
 		return &Error{Message: "access_token is required"}
 	}
+	stored, hash, err := p.sealToken(account.AccessToken)
+	if err != nil {
+		return err
+	}
 	p.db.Lock()
 	defer p.db.Unlock()
-	_, err := p.db.Conn().Exec(`
-		INSERT INTO accounts
-			(email, access_token, device_id, proxy, status, disabled, invalid_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(access_token) DO UPDATE SET
-			email = excluded.email,
-			device_id = excluded.device_id,
-			proxy = excluded.proxy,
-			status = excluded.status,
-			disabled = excluded.disabled,
-			invalid_at = excluded.invalid_at,
-			updated_at = CURRENT_TIMESTAMP`,
-		account.Email, account.AccessToken,
-		account.DeviceID, account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
-	if err != nil {
-		return fmt.Errorf("upsert account: %w", err)
+	var existingID int64
+	err = p.db.Conn().QueryRow(
+		"SELECT id FROM accounts WHERE token_hash = ?",
+		hash,
+	).Scan(&existingID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		_, err = p.db.Conn().Exec(`
+			INSERT INTO accounts
+				(email, access_token, token_hash, device_id, proxy, status, disabled, invalid_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+			account.Email, stored, hash,
+			account.DeviceID, account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
+		if err != nil {
+			return fmt.Errorf("upsert account: %w", err)
+		}
+		return nil
+	case err != nil:
+		return fmt.Errorf("lookup account for upsert: %w", err)
+	default:
+		_, err = p.db.Conn().Exec(`
+			UPDATE accounts SET
+				email = ?, access_token = ?, token_hash = ?, device_id = ?, proxy = ?,
+				status = ?, disabled = ?, invalid_at = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?`,
+			account.Email, stored, hash, account.DeviceID, account.Proxy,
+			account.Status, boolInt(account.Disabled), account.InvalidAt, existingID)
+		if err != nil {
+			return fmt.Errorf("upsert account: %w", err)
+		}
+		return nil
 	}
-	return nil
 }
 
 // Pick selects an enabled account, preferring the least recently used one.
@@ -239,9 +338,10 @@ func (p *Pool) Pick(preferredToken string, excluded map[string]struct{}) (string
 	var rows *sql.Rows
 	var err error
 	if preferred := strings.TrimSpace(preferredToken); preferred != "" {
+		hash := p.tokenHash(preferred)
 		rows, err = p.db.Conn().Query(
-			"SELECT "+accountSelectColumns+" FROM accounts WHERE access_token = ? AND disabled = 0 AND status <> '禁用'",
-			preferred,
+			"SELECT "+accountSelectColumns+" FROM accounts WHERE token_hash = ? AND disabled = 0 AND status <> '禁用'",
+			hash,
 		)
 	} else {
 		rows, err = p.db.Conn().Query(
@@ -256,7 +356,7 @@ func (p *Pool) Pick(preferredToken string, excluded map[string]struct{}) (string
 	var selected Account
 	found := false
 	for rows.Next() {
-		account, scanErr := scanAccount(rows)
+		account, scanErr := p.scanAccount(rows)
 		if scanErr != nil {
 			_ = rows.Close()
 			return "", Account{}, fmt.Errorf("read selected account: %w", scanErr)
@@ -291,12 +391,13 @@ func (p *Pool) MarkInvalid(token string) error {
 	if token == "" {
 		return nil
 	}
+	hash := p.tokenHash(token)
 	p.db.Lock()
 	defer p.db.Unlock()
 	_, err := p.db.Conn().Exec(`
 		UPDATE accounts
 		SET disabled = 1, status = '禁用', invalid_at = ?, updated_at = CURRENT_TIMESTAMP
-		WHERE access_token = ?`, float64(time.Now().Unix()), token)
+		WHERE token_hash = ?`, float64(time.Now().Unix()), hash)
 	if err != nil {
 		return fmt.Errorf("mark account invalid: %w", err)
 	}
@@ -312,23 +413,29 @@ func (p *Pool) AvailableCount() (int, error) {
 	return stats.Available, nil
 }
 
-func scanAccount(row store.Scanner) (Account, error) {
+func (p *Pool) scanAccount(row store.Scanner) (Account, error) {
 	var account Account
 	var disabled int
+	var storedToken, tokenHash string
 	if err := row.Scan(
-		&account.ID, &account.Email, &account.AccessToken,
+		&account.ID, &account.Email, &storedToken, &tokenHash,
 		&account.DeviceID, &account.Proxy, &account.Status, &disabled, &account.InvalidAt,
 		&account.LastUsedAt, &account.CreatedAt, &account.UpdatedAt,
 	); err != nil {
 		return Account{}, err
 	}
+	plain, err := p.openToken(storedToken)
+	if err != nil {
+		return Account{}, fmt.Errorf("decrypt account %d access token: %w", account.ID, err)
+	}
+	account.AccessToken = plain
 	account.Disabled = disabled != 0
 	return account, nil
 }
 
 func (p *Pool) getUnlocked(id int64) (Account, error) {
 	row := p.db.Conn().QueryRow("SELECT "+accountSelectColumns+" FROM accounts WHERE id = ?", id)
-	account, err := scanAccount(row)
+	account, err := p.scanAccount(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, ErrNotFound
 	}
@@ -338,15 +445,41 @@ func (p *Pool) getUnlocked(id int64) (Account, error) {
 	return account, nil
 }
 
-func (p *Pool) tokenExistsUnlocked(token string, exceptID int64) (bool, error) {
+func (p *Pool) tokenHashExistsUnlocked(hash string, exceptID int64) (bool, error) {
 	var count int
 	if err := p.db.Conn().QueryRow(
-		"SELECT COUNT(*) FROM accounts WHERE access_token = ? AND id <> ?",
-		token, exceptID,
+		"SELECT COUNT(*) FROM accounts WHERE token_hash = ? AND id <> ?",
+		hash, exceptID,
 	).Scan(&count); err != nil {
 		return false, fmt.Errorf("check account token: %w", err)
 	}
 	return count > 0, nil
+}
+
+func (p *Pool) sealToken(plaintext string) (stored, hash string, err error) {
+	plaintext = strings.TrimSpace(plaintext)
+	if plaintext == "" {
+		return "", "", &Error{Message: "access_token is required"}
+	}
+	if p.box == nil {
+		return "", "", errors.New("token encryption key is not configured")
+	}
+	stored, err = p.box.Seal(plaintext)
+	if err != nil {
+		return "", "", fmt.Errorf("seal access token: %w", err)
+	}
+	return stored, p.box.Hash(plaintext), nil
+}
+
+func (p *Pool) openToken(stored string) (string, error) {
+	if p.box == nil {
+		return "", errors.New("token encryption key is not configured")
+	}
+	return p.box.Open(stored)
+}
+
+func (p *Pool) tokenHash(plaintext string) string {
+	return p.box.Hash(strings.TrimSpace(plaintext))
 }
 
 func normalizeAccount(account Account) Account {

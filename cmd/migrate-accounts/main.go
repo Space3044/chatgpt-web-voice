@@ -4,9 +4,11 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/accounts"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/logging"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/secretbox"
 )
 
 func main() {
@@ -16,6 +18,22 @@ func main() {
 
 	logger := logging.New("json", "info")
 	slog.SetDefault(logger)
+
+	keyRaw := strings.TrimSpace(os.Getenv("VOICE_TOKEN_ENCRYPTION_KEY"))
+	if keyRaw == "" {
+		logger.Error("account_migration_failed", "stage", "config", "error", "VOICE_TOKEN_ENCRYPTION_KEY is required")
+		os.Exit(1)
+	}
+	key, err := secretbox.ParseKey(keyRaw)
+	if err != nil {
+		logger.Error("account_migration_failed", "stage", "config", "error", err)
+		os.Exit(1)
+	}
+	box, err := secretbox.New(key)
+	if err != nil {
+		logger.Error("account_migration_failed", "stage", "config", "error", err)
+		os.Exit(1)
+	}
 
 	items, err := accounts.ImportJSONFile(*from)
 	if err != nil {
@@ -28,6 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	pool.WithBox(box)
 
 	for index, account := range items {
 		if err := pool.Upsert(account); err != nil {
