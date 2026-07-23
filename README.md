@@ -1,302 +1,192 @@
 # chatgpt-web-voice
 
-[![Live Demo](https://img.shields.io/badge/demo-voice.peekcart.com-10a37f)](https://voice.peekcart.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8)](https://go.dev/)
+[![GHCR](https://img.shields.io/badge/ghcr.io-space3044%2Fchatgpt--web--voice-2496ED)](https://github.com/Space3044/chatgpt-web-voice/pkgs/container/chatgpt-web-voice)
 
-Self-hosted **ChatGPT.com Web Voice** gateway. The browser owns WebRTC media; this service owns the account pool, SDP proxy to `chatgpt.com/realtime/wm`, voice-session binding, and persisted text conversations.
+自托管的 **ChatGPT.com Web Voice 网关**。
 
-Use a ChatGPT web `access_token` from your own account pool. No official Realtime API key is required for this web path. Upstream credentials are sealed in SQLite (AES-256-GCM) and are never returned to the browser in full.
+浏览器或下游后端负责 WebRTC 媒体与 DataChannel；本服务负责账号池、向 `chatgpt.com/realtime/wm` 做 SDP 信令代理、语音会话绑定，以及必要的元数据持久化。使用自有 ChatGPT Web `access_token` 池，**不需要** OpenAI 官方 Realtime API Key。上游 token 在 SQLite 中以 AES-256-GCM 密封存储，不会完整返回给浏览器或下游。
 
-## Features
+**设计边界：信令走网关，媒体由客户端直连上游。** 网关不接收、不存储原始通话音频。
 
-- Realtime voice call (`/realtime/wm` + WebRTC + DataChannel)
-- In-call text via DataChannel `relay_message`
-- Auto barge-in interrupt (`action_request: stop_speaking`)
-- Captions from `chat_message_delta`
-- Voice session token binding (`voice_session_id`)
-- Authenticated SQLite account pool panel
-- AES-256-GCM sealed ChatGPT access tokens at rest (`VOICE_TOKEN_ENCRYPTION_KEY`)
-- Hashed downstream API keys with one-time secret display
-- API-key-only `/v1` SDP connection API and public voice capability document
-- JWT expiry display for stored access tokens
-- Manual account probe against `backend-api/settings/user`
-- Chat-style voice workspace with session history and settings drawer
-- Authenticated SQLite persistence for conversations and captions/messages
+## 功能概览
 
-WebRTC media flows between the browser and the upstream service. The gateway does not receive or store raw call audio; it persists conversation metadata and text/captions only.
+- 实时语音（`/realtime/wm` + WebRTC + DataChannel）
+- 通话中文本与字幕（DataChannel）
+- 自动打断（barge-in）
+- 管理端：账号池、下游 API Key、会话元数据、内置语音页
+- 下游 `/v1` 接入：只持 API Key + `voice_session_id` 即可建连 / 恢复
+- 粘性账号与上游续聊线索由网关持久化，不向下游暴露池内账号信息
 
-## Start locally
+## 本地启动
+
+需要 Go 1.22+。
 
 ```bash
 cp .env.example .env
-# set VOICE_AUTH_USERNAME, VOICE_AUTH_PASSWORD, and VOICE_TOKEN_ENCRYPTION_KEY
-# VOICE_TOKEN_ENCRYPTION_KEY=$(openssl rand -hex 32)
+# 必填：
+#   VOICE_AUTH_USERNAME
+#   VOICE_AUTH_PASSWORD
+#   VOICE_TOKEN_ENCRYPTION_KEY   # openssl rand -hex 32
 ```
-
-`VOICE_ENV` defaults to `development` and only accepts `development` or `production`. Development may enable gateway TLS for LAN microphone use via `./scripts/dev.sh --tls` (self-signed cert under `data/certs/`).
 
 ```bash
-set -a
-source .env
-set +a
+set -a && source .env && set +a
 go run ./cmd/server
-# open http://127.0.0.1:8090/voice
+# 打开 http://127.0.0.1:8090/voice
 ```
 
-Or with the WSL helper (loads `.env` automatically):
+或使用辅助脚本（自动加载 `.env`）：
 
 ```bash
 bash ./scripts/dev.sh
 ```
 
-Log in with the configured username/password. Manage ChatGPT web credentials at:
+登录后常用页面：
 
-```text
-http://127.0.0.1:8090/accounts
-```
+| 路径 | 说明 |
+|---|---|
+| `/voice` | 内置语音工作台 |
+| `/accounts` | ChatGPT Web 账号池 |
+| `/keys` | 下游 API Key（完整密钥只显示一次） |
+| `/sessions` | 网关语音会话元数据（无聊天正文） |
 
-The accounts panel is also linked from the voice page settings drawer.
-
-Create and revoke downstream API keys at:
-
-```text
-http://127.0.0.1:8090/keys
-```
-
-### Optional: legacy JSON import
-
-If you still have an old `accounts.json`, import it once. The running server never reads that file.
-
-```bash
-# requires VOICE_TOKEN_ENCRYPTION_KEY in the environment
-go run ./cmd/migrate-accounts \
-  -from ./data/accounts.json \
-  -database ./data/voice.db
-```
-
-New installs can skip this. The server creates an empty SQLite database and accounts can be added from the panel.
-
-### Build a binary
+编译二进制：
 
 ```bash
 go build -buildvcs=false -o bin/server ./cmd/server
 ./bin/server
 ```
 
-## Docker Compose
+## Docker 部署
+
+推荐使用 Docker Compose 部署。仓库根目录的 `docker-compose.yml` 已指向发布镜像：
+
+```text
+ghcr.io/space3044/chatgpt-web-voice:latest
+```
+
+默认配置要点：
+
+| 项 | 值 | 说明 |
+|---|---|---|
+| `network_mode` | `host` | 共用宿主机网络，出站走宿主机透明代理（如 dae） |
+| 监听 | 宿主机 `8090` | host 网络下不再做端口映射 |
+| `mem_limit` | `128m` | 容器内存上限 128MB |
+| `pull_policy` | `always` | 每次 up 尝试拉取最新镜像 |
+| 数据 | `./data` | SQLite 等 |
+| 日志 | 容器 stdout | `docker compose logs -f` 查看 |
+
+镜像默认 `VOICE_ENV=production`、不在容器内终止 TLS。生产环境可在前面加 Nginx / Caddy / Traefik。请保证 `./data` 可写（进程用户为 uid 1000）。
+
+### 启动
 
 ```bash
 cp .env.example .env
-# set VOICE_AUTH_USERNAME, VOICE_AUTH_PASSWORD, and VOICE_TOKEN_ENCRYPTION_KEY
+# 填写 VOICE_AUTH_USERNAME / VOICE_AUTH_PASSWORD / VOICE_TOKEN_ENCRYPTION_KEY
 mkdir -p data
-docker compose up --build -d
-docker compose ps
+# 若权限报错：chown -R 1000:1000 data
+docker compose up -d
 ```
 
-Open `http://127.0.0.1:8090/voice` by default. Change the published host port with `VOICE_PORT`.
+启动后访问：`http://127.0.0.1:8090/voice`。
 
-The production image sets `VOICE_ENV=production` and `VOICE_TLS=false`. Serve HTTPS at Nginx, Traefik, Caddy, or another reverse proxy. SQLite data lives in `./data`; static assets are baked into the image (rebuild after frontend changes). Compose requires `VOICE_AUTH_USERNAME`, `VOICE_AUTH_PASSWORD`, and `VOICE_TOKEN_ENCRYPTION_KEY`.
+### 常用命令
 
 ```bash
+docker compose ps
 docker compose logs -f chatgpt-web-voice
+docker compose pull
+docker compose up -d
 docker compose restart chatgpt-web-voice
 docker compose down
 ```
 
-Legacy JSON import under Compose:
+### 环境变量
 
-```bash
-docker compose run --rm --build chatgpt-web-voice \
-  /app/migrate-accounts -from /app/data/accounts.json -database /app/data/voice.db
-```
+在 `.env` 中配置（Compose 会读取）：
 
-Production mode never auto-generates a certificate. If you set `VOICE_TLS=true` outside the standard Compose file, you must also provide `VOICE_TLS_CERT` and `VOICE_TLS_KEY`.
-
-## WSL2 + Windows / VS Code
-
-Run the service inside WSL and open it from the Windows browser.
-
-### Recommended: VS Code Port Forward
-
-1. Open this folder with **VS Code Remote - WSL**
-2. In WSL:
-
-```bash
-set -a
-source .env
-set +a
-./scripts/dev.sh
-```
-
-3. VS Code **Ports** → **Forward Port** → `8090`
-4. On Windows and WSL use:
-
-```text
-http://127.0.0.1:8090/voice
-```
-
-`127.0.0.1` is a secure context, so the microphone works. Do not use a LAN IP over plain HTTP for voice; the page may load but mic capture will fail.
-
-### Alternative: TLS on LAN IP
-
-```bash
-./scripts/dev.sh --tls
-# open https://<WSL-IP>:8090/voice  (accept self-signed warning)
-```
-
-Development convenience only. Production should keep the gateway on internal HTTP and terminate TLS at the reverse proxy.
-
-### Checklist
-
-| Check | Action |
+| 变量 | 说明 |
 |---|---|
-| Server up in WSL | `curl -u "$VOICE_AUTH_USERNAME:$VOICE_AUTH_PASSWORD" -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8090/voice` → `200` |
-| Port forwarded | Ports panel shows `8090` → `localhost:8090` |
-| Browser URL | `http://127.0.0.1:8090/voice` (not HTTPS unless TLS is enabled) |
-| Mic fails on LAN IP | Use forwarded `127.0.0.1` or `./scripts/dev.sh --tls` |
+| `VOICE_AUTH_USERNAME` | 管理端登录用户名（必填） |
+| `VOICE_AUTH_PASSWORD` | 管理端登录密码（必填） |
+| `VOICE_TOKEN_ENCRYPTION_KEY` | 密封账号 token 的 32 字节密钥（hex 或 base64，必填）；丢失后已存 token 无法解密 |
+| `VOICE_LOG_LEVEL` | 可选：`debug` / `info` / `warn` / `error` |
 
-## Architecture
+上游代理优先用账号池 per-account proxy；未配置时进程直连，由宿主机透明代理（dae 等）按规则处理。
 
-```text
-Built-in browser (static/voice.html)
-  mic + RTCPeerConnection + DataChannel(oai-events)
-        |
-        | POST /api/voice/session
-        v
-Gateway (Go, stdlib net/http)
-  administrator auth + downstream API key auth
-  SQLite account pool + per-account proxy + hashed API keys
-  header shaping for ChatGPT web requests
-        |
-        v
-chatgpt.com
-  /realtime/wm  +  Azure WebRTC media
+## 下游接口
 
-Downstream backend
-  Authorization: Bearer vgw_live_...
-  GET /v1/voice/config
-  POST /v1/voice/sessions
-        |
-        +--> returns answer SDP; downstream owns WebRTC, captions, and history
-```
-
-Internal package layout:
-
-```text
-cmd/server              process entrypoint
-internal/app            wiring, HTTP root, TLS, static routes
-internal/api            HTTP handlers (depends on domain interfaces)
-internal/auth           login sessions and Basic Auth
-internal/apikeys        hashed downstream credentials
-internal/voice          realtime session + account probe service
-internal/accounts       ChatGPT account pool repository
-internal/conversations  conversation / caption repository
-internal/store          shared SQLite open + schema
-internal/config         environment configuration
-internal/httpclient     upstream HTTP transport policy
-internal/logging        slog + request middleware
-internal/tokenutil      JWT exp display helpers
-internal/tlsutil        local self-signed cert helper
-```
-
-Upstream HTTP uses Go `net/http` and `crypto/tls`. Requests set browser-like headers (`User-Agent`, `Origin`, `Referer`, `oai-device-id`, client version fields). This is not Chrome TLS fingerprint impersonation.
-
-## Authentication
-
-All pages, static assets, and business APIs require login. Public routes:
-
-- `GET /login`
-- `POST /api/auth/login`
-
-Successful browser login always redirects to `/voice`.
-
-Browsers use an HttpOnly session cookie. The login page can optionally keep that cookie for `VOICE_AUTH_SESSION_TTL_SECONDS`. Session tokens live in gateway memory; restarting the process requires logging in again.
-
-Automation can use HTTP Basic Auth:
-
-```bash
-curl -u "$VOICE_AUTH_USERNAME:$VOICE_AUTH_PASSWORD" \
-  http://127.0.0.1:8090/api/voice/health
-```
+下游使用在 `/keys` 创建的 Bearer API Key，**只能**访问 `/v1/*`。
 
 ```http
-Authorization: Basic <base64(username:password)>
+Authorization: Bearer vgw_live_<密钥>
 ```
 
-Downstream integrations use a separately generated Bearer API key. API keys
-can access `/v1/*` only; they cannot access pages, account management,
-conversations, or administrator APIs. Keep long-lived keys in the downstream
-backend rather than browser JavaScript.
+### 接口列表
 
-```http
-Authorization: Bearer vgw_live_<random-secret>
-```
-
-## API
-
-| Method | Path | Description |
+| 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/voice/health` | health |
-| GET | `/api/voice/config` | non-secret voice/WebRTC capabilities for the built-in client |
-| POST | `/api/voice/session` | offer SDP → answer SDP |
-| POST | `/api/voice/session/release` | unbind voice session |
-| GET | `/api/accounts` | list accounts and pool stats (secrets redacted; includes JWT expiry fields) |
-| POST | `/api/accounts` | create account |
-| PUT | `/api/accounts/{id}` | update / enable / disable account |
-| DELETE | `/api/accounts/{id}` | delete account |
-| POST | `/api/accounts/{id}/check` | probe token via `GET /backend-api/settings/user` |
-| GET | `/api/keys` | list redacted downstream API key metadata |
-| POST | `/api/keys` | create a key and return its secret once |
-| PATCH | `/api/keys/{id}` | rename, enable, or disable a key |
-| DELETE | `/api/keys/{id}` | permanently revoke and delete a key |
-| GET | `/api/conversations` | list conversations for the logged-in user |
-| POST | `/api/conversations` | create conversation |
-| GET | `/api/conversations/{id}` | read conversation and messages |
-| PATCH | `/api/conversations/{id}` | rename conversation |
-| DELETE | `/api/conversations/{id}` | delete conversation and messages |
-| POST | `/api/conversations/{id}/messages` | insert or update a text message/caption |
-| GET | `/api/auth/session` | current authenticated user |
-| POST | `/api/auth/logout` | revoke browser session |
+| `GET` | `/v1/health` | 健康检查 |
+| `GET` | `/v1/voice/config` | 音色、语言、STUN、DataChannel 约定 |
+| `POST` | `/v1/voice/sessions` | 建立或恢复语音会话（SDP 交换） |
+| `POST` | `/v1/voice/sessions/{voice_session_id}/context` | 上报 DataChannel 学到的上游 id |
+| `GET` | `/v1/voice/sessions/{voice_session_id}/title` | 拉取上游会话标题 |
+| `DELETE` | `/v1/voice/sessions/{voice_session_id}` | 释放网关内存绑定 |
 
-### Voice session body
+### 推荐接入流程
 
-Only signaling and voice options are accepted. Downstream clients must not send `access_token`, `device_id`, or `proxy`.
+下游业务会话与网关 `voice_session_id` 一一对应。下游**只需保存** API Key 与 `voice_session_id`；池内账号与上游续聊线索由网关持久化，**不返回给下游**。
 
-```json
-{
-  "offer_sdp": "v=0\r\n...",
-  "voice": "cove",
-  "voice_mode": "wingman",
-  "language_code": "auto",
-  "voice_session_id": ""
-}
-```
+1. **首次建连**  
+   `POST /v1/voice/sessions`，body 只带 `offer_sdp` 与语音选项。  
+   保存响应中的 `voice_session_id` 到下游业务会话。
 
-### Downstream connection API
+2. **通话中**  
+   客户端自己维护 `RTCPeerConnection` 与 DataChannel。  
+   学到上游 `conversation_id` 等后，调用  
+   `POST /v1/voice/sessions/{voice_session_id}/context` 写入网关。
 
-The gateway only authenticates the caller, selects an internal account, and
-exchanges SDP. The downstream owns `RTCPeerConnection`, microphone/audio,
-DataChannel events, captions, business conversations, and persistence.
+3. **挂断**  
+   `DELETE /v1/voice/sessions/{voice_session_id}` 释放内存绑定；SQLite 元数据仍保留。
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/v1/health` | authenticated downstream API health |
-| GET | `/v1/voice/config` | voices, languages, defaults, STUN, and DataChannel configuration |
-| POST | `/v1/voice/sessions` | offer SDP → answer SDP |
-| DELETE | `/v1/voice/sessions/{voice_session_id}` | release the caller-owned gateway binding |
+4. **恢复 / 再拨**  
+   再次 `POST /v1/voice/sessions`，带上**同一个** `voice_session_id` 与新的 `offer_sdp`。  
+   网关根据记录自动粘回账号并尽量续上上游会话。
+
+### 请求示例
+
+首次：
 
 ```bash
 curl -X POST https://voice.example.com/v1/voice/sessions \
   -H "Authorization: Bearer $VOICE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "offer_sdp": "v=0\\r\\n...",
+    "offer_sdp": "v=0\r\n...",
     "voice": "cove",
     "voice_mode": "wingman",
     "language_code": "auto"
   }'
 ```
+
+恢复：
+
+```bash
+curl -X POST https://voice.example.com/v1/voice/sessions \
+  -H "Authorization: Bearer $VOICE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "offer_sdp": "v=0\r\n...",
+    "voice": "cove",
+    "voice_mode": "wingman",
+    "language_code": "auto",
+    "voice_session_id": "vs_..."
+  }'
+```
+
+响应（不会包含账号 id、token、代理等）：
 
 ```json
 {
@@ -308,141 +198,65 @@ curl -X POST https://voice.example.com/v1/voice/sessions \
 }
 ```
 
-The response never includes account IDs, email addresses, access tokens,
-device IDs, proxies, account status, or pool statistics. A voice session is
-namespaced to the API key that created it, so another key cannot reuse or
-release that binding. Omit `voice_session_id` when creating the first
-connection; a later reconnect may send the ID previously returned by the same
-API key. Unknown IDs return `404`, while unknown voice, mode, or language
-values return `400`.
+### 责任划分
 
-### Account probe
-
-`POST /api/accounts/{id}/check` calls ChatGPT `GET /backend-api/settings/user` with the stored token:
-
-| Upstream result | Gateway behavior |
+| 角色 | 负责 |
 |---|---|
-| `200` + JSON | report `alive` |
-| `401` | report `unauthorized`, mark account disabled in SQLite |
-| HTML challenge / network / other | report `unknown`, do **not** disable the account |
+| 下游 | API Key 鉴权请求、WebRTC 媒体、DataChannel、字幕与业务会话内容存储 |
+| 网关 | 鉴权、选号、SDP 代理、粘性账号、上游续聊元数据、会话记录 |
+| chatgpt.com | 语音推理与远端媒体 |
 
-Account list responses also include local JWT claims when the access token is a JWT: `token_has_exp`, `token_exp`, `expires_in_seconds`, `token_expired`. Signature is not verified; this is display and pre-check only.
+`voice_session_id` 按 API Key 隔离；未知 id 返回 `404`。上游是否真正 resume 取决于 token 是否有效及 chatgpt.com 是否接受续聊参数（best-effort）。
 
-## In-call protocol
-
-Envelope:
-
-```json
-{ "type": "data_message", "data": "<json string>" }
-```
-
-Text:
-
-```json
-{
-  "type": "relay_message",
-  "payload": {
-    "type": "relay_message",
-    "message": {
-      "id": "uuid",
-      "author": { "role": "user" },
-      "create_time": 1710000000.0,
-      "content": { "content_type": "text", "parts": ["hello"] },
-      "metadata": { "serialization_metadata": { "custom_symbol_offsets": [] } },
-      "clientMetadata": { "isOptimistic": true }
-    }
-  }
-}
-```
-
-Interrupt:
-
-```json
-{ "type": "action_request", "payload": { "action": "stop_speaking" } }
-```
-
-## SQLite data
-
-Runtime database: `VOICE_DATABASE_FILE` (default under `data/voice.db`). Conversation text is stored as plaintext. ChatGPT `access_token` values are sealed with AES-256-GCM using `VOICE_TOKEN_ENCRYPTION_KEY` (32-byte hex or base64); uniqueness uses a keyed `token_hash` column. Downstream API key secrets store only SHA-256 hashes and display prefixes. The database file is created with owner-only permissions where supported.
-
-Generate a stable encryption key once (`openssl rand -hex 32`) and back it up with the same care as the login password. Losing the key makes existing sealed account tokens unreadable. On startup the gateway rewrites any legacy plaintext `access_token` rows in place.
-
-Selection prefers the least recently used enabled account. An upstream **401** from the voice path or from a manual probe disables that account in SQLite.
-
-Proxy selection for upstream ChatGPT requests:
-
-1. If the selected account has a proxy in SQLite, that proxy is used.
-2. Otherwise Go follows the process proxy environment (`HTTP_PROXY` / `HTTPS_PROXY` and `NO_PROXY`; lowercase variants are also recognized).
-3. If neither is set, the request goes direct.
-
-There is no gateway-wide `VOICE_*` proxy setting. These are standard process environment variables, and the account proxy always takes precedence. Docker Compose passes through the host shell's standard proxy variables when present. Windows system proxy/PAC settings are not automatically visible inside WSL or a container unless they are exported into that process environment.
-
-The `/accounts` panel supports create, edit, enable/disable, search, delete, JWT expiry display, and manual probe. Empty secret fields keep existing values on edit; proxy has an explicit clear action.
-
-The `/keys` panel supports create, one-time secret copy, rename, enable/disable,
-and delete. Disabling or deleting a key blocks subsequent `/v1` requests. Since
-media flows directly between the downstream and ChatGPT after SDP exchange,
-revoking a key does not forcibly terminate an already established peer
-connection.
-
-List/write APIs never return full access tokens or proxy passwords. They expose an access-token preview, a password-free proxy preview, and JWT expiry metadata.
-
-## Logging
-
-JSON logs by default. HTTP access events include request ID, method, path, status, response bytes, duration, remote IP, and user agent. Responses include `X-Request-ID`. Passwords, authorization headers, and ChatGPT tokens are not logged.
-
-## Environment
-
-| Env | Default | Meaning |
-|---|---|---|
-| `VOICE_AUTH_USERNAME` | required | gateway login username |
-| `VOICE_AUTH_PASSWORD` | required | gateway login password |
-| `VOICE_TOKEN_ENCRYPTION_KEY` | required | 32-byte key (hex or base64) that seals account access tokens at rest |
-| `VOICE_PORT` | `8090` | Docker Compose host port |
-| `VOICE_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error` |
-
-The standard Compose container uses SQLite at `/app/data/voice.db`, static assets at `/app/static`, listener `:8090`, `VOICE_ENV=production`, `VOICE_TLS=false`, and JSON logs.
-
-In production, upstream TLS verification is always on (`VOICE_SKIP_SSL_VERIFY` is forced false). Local development may set additional knobs such as `VOICE_ENV`, `VOICE_TLS`, `VOICE_DATABASE_FILE`, and `VOICE_LOG_FORMAT` outside Compose.
-
-## Project layout
+## 架构
 
 ```text
-cmd/server/              gateway entrypoint
-cmd/migrate-accounts/    one-time JSON → SQLite migration
-internal/auth/           browser session + Basic Auth
-internal/apikeys/        SQLite API key hashes and metadata
-internal/secretbox/      AES-GCM seal/open for account access tokens
-internal/config/         environment config
-internal/accounts/       SQLite accounts and conversations
-internal/logging/        slog setup and HTTP middleware
-internal/httpclient/     upstream HTTP client (account proxy / process proxy environment / skip-verify)
-internal/tokenutil/      JWT expiry helpers
-internal/voice/          /realtime/wm gateway and account probe
-internal/api/            protected HTTP handlers
-static/login.html        login page
-static/voice.html        voice client
-static/accounts.html     account pool panel
-static/keys.html         downstream API key panel
-data/voice.db            runtime database (gitignored)
+下游 / 内置语音页
+  mic + RTCPeerConnection + DataChannel(oai-events)
+        │
+        │  Authorization: Bearer / 管理端登录
+        │  POST offer_sdp → answer_sdp
+        ▼
+Gateway (Go)
+  鉴权 · 账号池 · SDP 代理 · 会话绑定 · SQLite 元数据
+        │
+        │  POST chatgpt.com/realtime/wm
+        ▼
+chatgpt.com + Azure WebRTC
+  媒体面：客户端 ↔ 上游直连（不经网关）
 ```
 
-## Security
+### 核心模块
 
-- Do not commit `voice.db`, credential dumps, tokens, or `VOICE_TOKEN_ENCRYPTION_KEY`
-- ChatGPT `access_token` values are sealed in SQLite; keep the encryption key offline-backed up
-- The browser only holds a gateway session cookie; it never receives an upstream web token
-- Downstream API keys are shown once, stored as hashes, and scoped to `/v1/*`
-- Use HTTPS whenever the login page is reachable beyond localhost (for example Caddy reverse proxy)
-- Keep gateway credentials strong and private
+| 模块 | 职责 |
+|---|---|
+| `cmd/server` | 进程入口 |
+| `internal/app` | 依赖装配、静态页、TLS |
+| `internal/api` | HTTP 适配（管理端 + `/v1`） |
+| `internal/auth` | 浏览器会话 / Basic Auth / API Key |
+| `internal/accounts` | 账号池（token 密封） |
+| `internal/voice` | `/realtime/wm` 代理与会话绑定 |
+| `internal/callsessions` | 网关会话元数据（无聊天正文） |
+| `internal/conversations` | 内置语音页文本会话（管理端） |
+| `internal/apikeys` | 下游 Key（仅存 hash） |
 
-## License / disclaimer
+### 会话与恢复
 
-MIT. Research / self-hosted gateway.
+- 网关为每次建连分配 `voice_session_id`（`vs_...`）。
+- 成功建连后写入 `call_sessions`：调用方（admin / 下游 key）、粘性 `account_id`、上游 id、语音参数等。
+- 挂断释放**内存绑定**；再拨时凭 `voice_session_id` 从 SQLite 恢复粘性账号与上游线索。
+- 管理端 `/sessions` 可查看元数据，**不展示聊天内容**。下游 `/v1` 本身也不落库聊天正文。
 
-Requires your own ChatGPT web login session token.  
-Not affiliated with OpenAI. Follow OpenAI ToS and local laws.
+更细的实现说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-## Links
+## 许可与声明
 
-- Live demo: https://voice.peekcart.com/
+MIT。研究 / 自托管网关用途。
+
+本项目源码参考自 [dyhhhhhh/chatgpt-web-voice](https://github.com/dyhhhhhh/chatgpt-web-voice)，在其基础上继续开发与维护。感谢原作者的工作。
+
+需要使用自有 ChatGPT Web 登录会话 token。  
+与 OpenAI 无关联；请遵守 OpenAI 服务条款与当地法律法规。
+
+- 参考源码：https://github.com/dyhhhhhh/chatgpt-web-voice
+- 容器镜像：https://github.com/Space3044/chatgpt-web-voice/pkgs/container/chatgpt-web-voice

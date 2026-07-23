@@ -496,6 +496,42 @@ internal/app          装配、TLS、静态路由、root mux
 
 ---
 
-## 14. 一句话总结
+## 14. 上游会话续聊（best-effort）
 
-**chatgpt-web-voice 把 ChatGPT 网页版语音通话拆成「可池化的信令代理」与「浏览器直连的媒体面」：用密封存储的 web token 账号池向 `/realtime/wm` 换 SDP，用内存绑定固定会话账号，用 SQLite 管理账号、下游 Key 与文本历史，同时把原始音频与上游凭证挡在浏览器与磁盘明文之外。**
+网关在账号 sticky 之外，额外尝试保持 **chatgpt.com conversation** 连续性：
+
+| 字段 | 存哪里 | 作用 |
+|---|---|---|
+| Gateway `voice_session_id` (`vs_...`) | 内存绑定 + **call_sessions** + 本地 conversation | 会话期活绑定；元数据表供管理页与重启恢复 |
+| Pool `account_id` | 内存绑定 + **call_sessions** + 本地 conversation | 持久 sticky 账号；admin 与下游 key 共用 |
+| Upstream `voice_session_id` (UUID) | 绑定 + call_sessions / conversation SQLite | 重连 SDP 时写入 `/realtime/wm` session JSON |
+| `conversation_id` / `parent_message_id` | DataChannel 学习 → 绑定 + SQLite | 重建连时带回 wm；是否被上游采纳取决于 chatgpt.com |
+| 调用方 `admin` / `api_key:<id>` | **call_sessions**（无聊天正文） | 管理页 `/sessions` 展示；下游不落库字幕/文本 |
+
+流程：
+
+1. 首次建连：Pick 账号，生成上游 UUID，换 SDP，内存绑定；响应带回 `account_id`。
+2. 通话中 DataChannel 上报 `conversation_id` 等 → 客户端 `POST /api/voice/session/context`（或 `/v1/.../context`）+ `PATCH` 本地 conversation（含 `account_id` + 上游 id）。
+3. 挂断：先 `PATCH` 持久化 `account_id` + 上游 id，再 **release 内存绑定**（`call_sessions` 记为 released，元数据仍在）。
+4. 同会话再拨：带 `voice_session_id` + `account_id` + 上游字段 → 内存若无则从 `call_sessions` 恢复 sticky → `PickByID(account_id)` → 同账号 + 尽量同 conversation。
+5. 新建本地 chat：release 绑定并清空上游字段与 sticky `account_id`。
+
+限制：绑定账号 token 失效/被删/禁用时 **fail closed**（不静默换号 resume）；上游协议变更或拒绝 resume 时仍可能落到新会话。本地 SQLite 历史始终可看，不等于模型上下文。
+
+### 上游会话标题
+
+标题不在 SDP 里。Gateway 在绑定账号上代理：
+
+```text
+GET chatgpt.com/backend-api/conversation/{upstream_conversation_id}
+→ 只把 JSON 的 title 字段返回给调用方
+```
+
+- 管理面：`GET /api/voice/session/title?voice_session_id=...&upstream_conversation_id=...`
+- 下游：`GET /v1/voice/sessions/{id}/title`
+- 内置页在 DataChannel 学到 `conversation_id` 后自动拉取；用户手动改名后不再覆盖
+- 上游尚未生成标题时返回 `has_title=false`（常见于通话刚开始）
+
+## 15. 一句话总结
+
+**chatgpt-web-voice 把 ChatGPT 网页版语音通话拆成「可池化的信令代理」与「浏览器直连的媒体面」：用密封存储的 web token 账号池向 `/realtime/wm` 换 SDP，用内存绑定固定会话账号并 best-effort 续上游 conversation，用 SQLite 管理账号、下游 Key 与文本历史，同时把原始音频与上游凭证挡在浏览器与磁盘明文之外。**

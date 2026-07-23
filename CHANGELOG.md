@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Downstream `/v1` resume is gateway-owned: clients only keep `voice_session_id`; sticky pool account and upstream continuity are restored from `call_sessions` and are no longer returned or accepted on the public session create response.
+- Hangup now releases the gateway in-memory voice binding after persisting sticky `account_id` / upstream ids; the next dial restores continuity from SQLite instead of keeping the binding alive for `VOICE_SESSION_TTL_SECONDS`.
+- Added admin **会话记录** page (`/sessions`) and `call_sessions` metadata store: records who opened a voice session (`admin` vs downstream API key), sticky pool `account_id`, upstream ids, voice options, and active/released status — never chat content. Downstream `/v1` sessions get the same sticky resume via durable metadata after gateway restarts.
+- Persist sticky pool `account_id` on local SQLite conversations (with upstream resume ids) so reconnects after a gateway restart re-select the same ChatGPT account instead of LRU-picking another; session create accepts/returns `account_id`, and a missing/disabled bound account fails closed rather than silently rotating.
+- Fixed voice-page disconnect UI drift: transport `failed`/`disconnected` now fully tears down the call so the end button and composer leave the live/connecting state.
+- Best-effort upstream conversation resume: sticky upstream `voice_session_id`, optional `conversation_id` / `parent_message_id` on `/realtime/wm`, gateway context update APIs, and SQLite fields on local conversations so reconnects can try to continue the same chatgpt.com thread (same account required; not guaranteed by upstream).
+- Upstream conversation title fetch: gateway uses the sticky account token to `GET /backend-api/conversation/{id}` and returns only the title; built-in voice page auto-applies it to the local session title when available.
 - Sealed ChatGPT `access_token` values at rest with AES-256-GCM (`VOICE_TOKEN_ENCRYPTION_KEY`); uniqueness and preferred-token lookups use a keyed `token_hash`, and startup rewrites legacy plaintext rows in place.
 - Added hashed downstream API keys with one-time secret display, SQLite metadata, administrator CRUD APIs, and a `/keys` management panel.
 - Added an API-key-only `/v1` integration surface for capability discovery, SDP session creation, and caller-owned session release without exposing account-pool data.
