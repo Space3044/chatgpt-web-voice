@@ -6,10 +6,10 @@ services:
     network_mode: host
     mem_limit: 128m
     environment:
-      VOICE_AUTH_USERNAME: ${VOICE_AUTH_USERNAME:?VOICE_AUTH_USERNAME is required}
-      VOICE_AUTH_PASSWORD: ${VOICE_AUTH_PASSWORD:?VOICE_AUTH_PASSWORD is required}
-      VOICE_TOKEN_ENCRYPTION_KEY: ${VOICE_TOKEN_ENCRYPTION_KEY:?VOICE_TOKEN_ENCRYPTION_KEY is required}
-      VOICE_LOG_LEVEL: ${VOICE_LOG_LEVEL:-info}
+      VOICE_AUTH_USERNAME: ""
+      VOICE_AUTH_PASSWORD: ""
+      VOICE_TOKEN_ENCRYPTION_KEY: ""
+      VOICE_TLS: "false"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
