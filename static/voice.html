@@ -1078,10 +1078,19 @@
       border-color: rgba(16, 163, 127, .28);
       background: rgba(16, 163, 127, .08);
     }
-    body.app-shell #btnSpeaker.is-unlocked:not(:disabled) {
-      color: var(--app-green-bright);
-      border-color: rgba(16, 163, 127, .4);
-      background: rgba(16, 163, 127, .12);
+    body.app-shell #btnSpeaker.is-muted:not(:disabled) {
+      color: var(--app-red);
+      border-color: rgba(225, 29, 72, .28);
+      background: rgba(225, 29, 72, .08);
+    }
+    body.app-shell #btnSpeaker.is-muted:not(:disabled)::after {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 1.5px;
+      border-radius: 1px;
+      background: currentColor;
+      transform: rotate(-42deg);
     }
     body.app-shell .btn-main {
       width: 46px;
@@ -1108,22 +1117,26 @@
       box-shadow: 0 6px 16px rgba(196, 51, 51, .22);
     }
     body.app-shell .btn-main.is-connecting {
-      color: transparent;
+      width: auto;
+      min-width: 46px;
+      height: 46px;
+      padding: 0 14px;
+      border-radius: 999px;
+      color: #fff;
       background: var(--app-green);
-      box-shadow: 0 6px 16px rgba(16,163,127,.18);
+      box-shadow: 0 6px 16px rgba(16,163,127,.16);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      cursor: progress;
+      animation: call-btn-breathe 1.35s ease-in-out infinite;
     }
-    body.app-shell .btn-main.is-connecting::before {
-      content: "";
-      width: 14px;
-      height: 14px;
-      border: 2px solid rgba(255,255,255,.35);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: call-btn-spin .75s linear infinite;
+    @keyframes call-btn-breathe {
+      0%, 100% { opacity: .78; box-shadow: 0 6px 14px rgba(16,163,127,.12); }
+      50% { opacity: 1; box-shadow: 0 8px 20px rgba(16,163,127,.26); }
     }
-    @keyframes call-btn-spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) {
-      body.app-shell .btn-main.is-connecting::before { animation: none; }
+      body.app-shell .btn-main.is-connecting { animation: none; opacity: .88; }
       body.app-shell .btn-side,
       body.app-shell .btn-main { transition: none; }
     }
@@ -1651,7 +1664,7 @@
           <div class="controls" role="group" data-i18n-aria="callControl" aria-label="语音控制">
             <button type="button" class="btn-side" id="btnMute" data-i18n-title="mute" title="静音" aria-pressed="false" disabled></button>
             <button type="button" class="btn-main is-idle" id="btnMain" data-i18n-title="start" title="开始" data-i18n="start">开始</button>
-            <button type="button" class="btn-side" id="btnSpeaker" data-i18n-title="speaker" title="播放" aria-pressed="false" disabled></button>
+            <button type="button" class="btn-side" id="btnSpeaker" data-i18n-title="speakerOff" title="关闭扬声器" aria-pressed="true" disabled></button>
           </div>
           <div class="voice-wave local" id="localWave" data-wave="local" aria-hidden="true">
             <div class="voice-wave-label" data-i18n="meterLocal">我的声音</div>
@@ -1715,6 +1728,7 @@
           <div class="settings-card">
             <div class="settings-actions">
               <a href="/accounts" class="btn-ghost" data-i18n="accountPool">账号池</a>
+              <a href="/keys" class="btn-ghost" data-i18n="apiKeys">API 密钥</a>
               <button type="button" id="btnLogout" class="btn-ghost danger" data-i18n="logout">退出登录</button>
             </div>
           </div>
@@ -1815,6 +1829,7 @@
   var starting = false;
   var inCall = false;
   var muted = false;
+  var speakerMuted = false;
   var sending = false;
   var conversationId = '';
   var parentMessageId = '';
@@ -1844,10 +1859,17 @@
     ember: { name: 'Ember', description: 'Confident' },
     vale: { name: 'Vale', description: 'Bright' }
   };
-  var maxLocalHistoryRounds = 12;
-  var maxLocalHistoryItems = maxLocalHistoryRounds * 2;
+  var gatewayVoiceDefaults = { voice: 'cove', voice_mode: 'wingman', language_code: 'auto' };
+  var gatewayWebRTCConfig = {
+    data_channel: { label: 'oai-events', negotiated: true, id: 0 },
+    ice_servers: [
+      { urls: ['stun:stun.l.google.com:19302'] },
+      { urls: ['stun:stun4.l.google.com:19302'] }
+    ],
+    receive_audio: true,
+    receive_video: false
+  };
   var maxSessionMessages = 80;
-  var maxLocalContextChars = 8000;
   var currentSessionHistory = [];
   var currentTranscript = [];
   var legacySessionStorageKey = 'chatgpt_web_voice_sessions_v1';
@@ -1958,7 +1980,9 @@
       callControl: '语音控制',
       start: '开始',
       end: '结束',
-      speaker: '播放',
+      speaker: '扬声器',
+      speakerOn: '打开扬声器',
+      speakerOff: '关闭扬声器',
       composerPlaceholder: '通话中可发送文本…',
       send: '发送文本',
       composerHintIdle: '开始通话后可发送文本',
@@ -1978,6 +2002,7 @@
       advanced: '高级设置',
       authVerified: '已登录',
       accountPool: '账号池',
+      apiKeys: 'API 密钥',
       logout: '退出登录',
       voiceLabel: '音色',
       languageLabel: '通话语言',
@@ -1999,10 +2024,12 @@
       toastUnlockAudio: '已尝试解锁声音',
       toastMuted: '已静音',
       toastUnmuted: '麦克风已开',
+      toastSpeakerMuted: '已关闭扬声器',
+      toastSpeakerUnmuted: '扬声器已开',
       toastNeedContent: '请输入文本',
       toastTextSent: '文本已发送到语音会话',
       toastVirtualMic: '当前是虚拟麦克风，可能无法被识别，请换成真实麦克风',
-      toastClickSpeaker: '点击扬声器按钮解锁声音',
+      toastClickSpeaker: '点击扬声器按钮打开声音',
       toastConnFail: '连接失败',
       toastPreviewClick: '如果没有声音，请点一次页面后再切换音色试听',
       toastPreviewNoAudio: '已发送试听请求，但还没有收到上游音频',
@@ -2041,8 +2068,6 @@
       errAuthExpired: '登录已失效',
       errInsecure: '当前不是安全上下文，无法使用麦克风。请改用 http://127.0.0.1:端口/voice 或 HTTPS 打开（不要用局域网 IP 的 http://192.168.x.x）。开发环境下可运行 ./scripts/dev.sh --tls',
       errNoMicApi: '浏览器不支持麦克风',
-      ctxHistory: '以下是当前语音对话内的历史背景，仅用于理解当前问题，不需要对此单独回答：',
-      ctxCurrent: '当前用户消息：',
       previewPrompt: '请只用当前语音说：你好。不要添加其他内容。',
       voiceDesc_fathom: '随和多才',
       voiceDesc_cove: '沉稳直率',
@@ -2114,6 +2139,8 @@
       start: 'Start',
       end: 'End',
       speaker: 'Speaker',
+      speakerOn: 'Unmute speaker',
+      speakerOff: 'Mute speaker',
       composerPlaceholder: 'Send text during the call…',
       send: 'Send',
       composerHintIdle: 'Start a call to send text',
@@ -2133,6 +2160,7 @@
       advanced: 'Advanced',
       authVerified: 'Signed in',
       accountPool: 'Accounts',
+      apiKeys: 'API Keys',
       logout: 'Log out',
       voiceLabel: 'Voice',
       languageLabel: 'Spoken language',
@@ -2154,10 +2182,12 @@
       toastUnlockAudio: 'Tried to unlock audio',
       toastMuted: 'Muted',
       toastUnmuted: 'Microphone on',
+      toastSpeakerMuted: 'Speaker muted',
+      toastSpeakerUnmuted: 'Speaker on',
       toastNeedContent: 'Enter text',
       toastTextSent: 'Text sent to the voice session',
       toastVirtualMic: 'This looks like a virtual mic and may not work — switch to a real one',
-      toastClickSpeaker: 'Tap the speaker button to unlock audio',
+      toastClickSpeaker: 'Tap the speaker button to turn sound on',
       toastConnFail: 'Connection failed',
       toastPreviewClick: 'If you hear nothing, click the page once and preview again',
       toastPreviewNoAudio: 'Preview request sent, but no upstream audio yet',
@@ -2196,8 +2226,6 @@
       errAuthExpired: 'Session expired',
       errInsecure: 'This page is not a secure context, so the microphone is blocked. Open http://127.0.0.1:PORT/voice or HTTPS (not http://192.168.x.x). For local development on WSL, run ./scripts/dev.sh --tls.',
       errNoMicApi: 'This browser does not support the microphone API',
-      ctxHistory: 'Conversation history from the current voice call (context only, do not answer it alone):',
-      ctxCurrent: 'Current user message:',
       previewPrompt: 'Using only the current voice, say: hello. Do not add anything else.',
       voiceDesc_fathom: 'Easygoing & versatile',
       voiceDesc_cove: 'Composed & direct',
@@ -2319,7 +2347,7 @@
 
   function fillVoiceOptions() {
     if (!voiceEl) return;
-    var prev = normalizeVoice(voiceEl.value || 'cove');
+    var prev = normalizeVoice(voiceEl.value || gatewayVoiceDefaults.voice);
     voiceEl.innerHTML = '';
     chatgptVoiceOptions.forEach(function (code) {
       var meta = chatgptVoiceMeta[code] || { name: code };
@@ -2332,12 +2360,73 @@
     voiceEl.value = prev;
   }
 
+  async function loadGatewayVoiceConfig() {
+    var response = await gatewayFetch('/api/voice/config');
+    if (!response.ok) return;
+    var config = await response.json();
+    if (Array.isArray(config.voices) && config.voices.length) {
+      chatgptVoiceOptions = config.voices.map(function (item) {
+        return String(item.id || '').toLowerCase();
+      }).filter(Boolean);
+      var nextMeta = {};
+      config.voices.forEach(function (item) {
+        var id = String(item.id || '').toLowerCase();
+        if (!id) return;
+        nextMeta[id] = { name: String(item.name || id), description: String(item.description || '') };
+      });
+      chatgptVoiceMeta = nextMeta;
+    }
+    if (Array.isArray(config.languages) && config.languages.length) {
+      spokenLanguageMeta = config.languages.map(function (item) {
+        return [
+          String(item.id || '').toLowerCase(),
+          String(item.name_zh || item.id || ''),
+          String(item.name_en || item.id || '')
+        ];
+      }).filter(function (item) { return !!item[0]; });
+      spokenLanguageOptions = spokenLanguageMeta.map(function (item) { return item[0]; });
+    }
+    if (config.defaults && typeof config.defaults === 'object') {
+      gatewayVoiceDefaults = {
+        voice: String(config.defaults.voice || 'cove').toLowerCase(),
+        voice_mode: String(config.defaults.voice_mode || 'wingman').toLowerCase(),
+        language_code: String(config.defaults.language_code || 'auto').toLowerCase()
+      };
+    }
+    if (config.webrtc && typeof config.webrtc === 'object') gatewayWebRTCConfig = config.webrtc;
+    var configuredVoiceMode = document.getElementById('voiceMode');
+    if (configuredVoiceMode) configuredVoiceMode.value = gatewayVoiceDefaults.voice_mode;
+    refreshLocalizedControls();
+  }
+
+  function newVoicePeerConnection() {
+    return new RTCPeerConnection({
+      iceServers: Array.isArray(gatewayWebRTCConfig.ice_servers) ? gatewayWebRTCConfig.ice_servers : [],
+      bundlePolicy: 'max-bundle'
+    });
+  }
+
+  function createVoiceDataChannel(connection) {
+    var channel = gatewayWebRTCConfig.data_channel || {};
+    return connection.createDataChannel(String(channel.label || 'oai-events'), {
+      negotiated: channel.negotiated !== false,
+      id: Number.isInteger(channel.id) ? channel.id : 0
+    });
+  }
+
+  function voiceOfferOptions() {
+    return {
+      offerToReceiveAudio: gatewayWebRTCConfig.receive_audio !== false,
+      offerToReceiveVideo: gatewayWebRTCConfig.receive_video === true
+    };
+  }
+
   function languageOptionLabel(row) {
     return (uiLocale === 'en' ? row[2] : row[1]) + ' (' + row[0] + ')';
   }
 
   function getLanguageLabel(code) {
-    var value = normalizeLanguage(code || 'auto');
+    var value = normalizeLanguage(code || gatewayVoiceDefaults.language_code);
     for (var i = 0; i < spokenLanguageMeta.length; i++) {
       if (spokenLanguageMeta[i][0] === value) return languageOptionLabel(spokenLanguageMeta[i]);
     }
@@ -2395,7 +2484,7 @@
 
   function setLanguageValue(code, announce) {
     if (!languageEl) return;
-    var next = normalizeLanguage(code || 'auto');
+    var next = normalizeLanguage(code || gatewayVoiceDefaults.language_code);
     languageEl.value = next;
     if (languageTriggerText) languageTriggerText.textContent = getLanguageLabel(next);
     if (languageMenu) {
@@ -2414,7 +2503,7 @@
 
   function fillLanguageOptions() {
     if (!languageEl) return;
-    var prev = normalizeLanguage(languageEl.value || 'auto');
+    var prev = normalizeLanguage(languageEl.value || gatewayVoiceDefaults.language_code);
     languageEl.innerHTML = '';
     if (languageMenu) languageMenu.textContent = '';
     spokenLanguageMeta.forEach(function (row) {
@@ -2971,11 +3060,9 @@
     }
   }
 
-  async function prepareNewCallSession() {
+  // 继续当前本地会话：不新建、不清空历史。
+  async function prepareCallSession() {
     await waitForConversationStore();
-    if (currentSessionHistory.length || currentTranscript.length) await createConversationSession();
-    resetCurrentSessionHistory();
-    resetCurrentTranscript();
   }
 
   function loadCurrentSessionHistory() {
@@ -3215,35 +3302,19 @@
     recordTranscript('assistant', clean);
   }
 
-  function buildCurrentSessionContext() {
-    var lines = loadCurrentSessionHistory().slice(-maxLocalHistoryItems).map(function (item) {
-      var role = item.role === 'assistant' ? t('roleAssistant') : t('roleUser');
-      return role + (uiLocale === 'en' ? ': ' : '：') + clampText(item.content, 1200);
-    });
-    if (!lines.length) return '';
-    return clampText(t('ctxHistory') + '\n' + lines.join('\n'), maxLocalContextChars);
-  }
-
-  function withCurrentSessionContext(text) {
-    var context = buildCurrentSessionContext();
-    if (!context) return text;
-    var current = String(text || '').trim();
-    return context + '\n\n' + t('ctxCurrent') + '\n' + current;
-  }
-
   function normalizeVoice(value) {
     var clean = String(value || '').trim().toLowerCase();
     clean = chatgptVoiceAliases[clean] || clean;
-    return chatgptVoiceOptions.indexOf(clean) >= 0 ? clean : 'cove';
+    return chatgptVoiceOptions.indexOf(clean) >= 0 ? clean : gatewayVoiceDefaults.voice;
   }
 
   function normalizeLanguage(value) {
     var clean = String(value || '').trim().toLowerCase();
-    return spokenLanguageOptions.indexOf(clean) >= 0 ? clean : 'auto';
+    return spokenLanguageOptions.indexOf(clean) >= 0 ? clean : gatewayVoiceDefaults.language_code;
   }
 
   function voiceLabel(value) {
-    var meta = chatgptVoiceMeta[normalizeVoice(value)] || chatgptVoiceMeta.cove;
+    var meta = chatgptVoiceMeta[normalizeVoice(value)] || chatgptVoiceMeta[gatewayVoiceDefaults.voice];
     return meta.name + ' - ' + meta.description;
   }
 
@@ -3309,11 +3380,11 @@
     }
     if (btnSpeaker) {
       btnSpeaker.disabled = !inCall;
-      btnSpeaker.classList.toggle('is-live', inCall && !playbackSuppressed);
-      btnSpeaker.classList.toggle('is-unlocked', false);
-      btnSpeaker.setAttribute('aria-pressed', inCall && !playbackSuppressed ? 'true' : 'false');
-      btnSpeaker.setAttribute('title', t('speaker'));
-      btnSpeaker.setAttribute('aria-label', t('speaker'));
+      btnSpeaker.classList.toggle('is-live', inCall && !speakerMuted);
+      btnSpeaker.classList.toggle('is-muted', inCall && speakerMuted);
+      btnSpeaker.setAttribute('aria-pressed', inCall && !speakerMuted ? 'true' : 'false');
+      btnSpeaker.setAttribute('title', speakerMuted ? t('speakerOn') : t('speakerOff'));
+      btnSpeaker.setAttribute('aria-label', speakerMuted ? t('speakerOn') : t('speakerOff'));
     }
   }
 
@@ -3338,9 +3409,25 @@
     }
   }
 
+  function focusComposerInput() {
+    if (!textInput || textInput.disabled || !inCall || sending) return;
+    // 避免抢走用户已在别处的焦点（例如设置面板、侧边栏）。
+    var active = document.activeElement;
+    if (active && active !== document.body && active !== textInput && active !== btnMain) {
+      var tag = (active.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || active.isContentEditable) return;
+    }
+    try {
+      textInput.focus({ preventScroll: true });
+    } catch (e) {
+      textInput.focus();
+    }
+  }
+
   function updateComposerState() {
     // 官方语音会话中，正文通过 DataChannel relay_message 提交。
     var ready = inCall && !sending;
+    var wasDisabled = !!(textInput && textInput.disabled);
     textInput.disabled = !inCall || sending;
     btnSend.disabled = !ready;
     if (!inCall) {
@@ -3351,6 +3438,10 @@
       setComposerHint(t('composerHintConnected'), 'connected');
     } else {
       setComposerHint(t('composerHintWaiting'), 'waiting');
+    }
+    // 通话刚可用时自动聚焦输入框，方便立刻打字。
+    if (wasDisabled && ready) {
+      setTimeout(focusComposerInput, 0);
     }
   }
 
@@ -3369,17 +3460,34 @@
     sendDcEventTo(dcChannel, eventObj);
   }
 
+  function applyRemoteAudioOutput() {
+    if (!remoteAudio) return;
+    // 用户关扬声器，或打断时的临时压制，都静音远端音频元素。
+    var silent = !inCall || speakerMuted || playbackSuppressed;
+    remoteAudio.muted = silent;
+    if (!silent) ensureRemotePlay();
+  }
+
   function suppressRemotePlayback() {
     playbackSuppressed = true;
     try { remoteAudio.pause(); } catch (e) {}
-    remoteAudio.muted = true;
+    applyRemoteAudioOutput();
   }
 
   function restoreRemotePlayback() {
     if (!playbackSuppressed) return;
     playbackSuppressed = false;
-    remoteAudio.muted = false;
-    ensureRemotePlay();
+    applyRemoteAudioOutput();
+  }
+
+  function toggleSpeaker() {
+    if (!inCall) return;
+    speakerMuted = !speakerMuted;
+    // 手动打开扬声器时，清掉打断留下的临时压制。
+    if (!speakerMuted) playbackSuppressed = false;
+    applyRemoteAudioOutput();
+    updateCallControls();
+    toast(speakerMuted ? t('toastSpeakerMuted') : t('toastSpeakerUnmuted'));
   }
 
   function markAssistantSpeaking() {
@@ -3560,6 +3668,10 @@
     }
   }
 
+  function onVoiceChannelReady() {
+    sendVoicePreviewGreeting();
+  }
+
   async function warmMicPermission() {
     if (micPermissionWarmed) return true;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
@@ -3612,13 +3724,7 @@
       await stopVoicePreviewOnly();
       await warmMicPermission();
       previewStarting = true;
-      var pcLocal = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' }
-        ],
-        bundlePolicy: 'max-bundle'
-      });
+      var pcLocal = newVoicePeerConnection();
       previewPc = pcLocal;
       var deviceId = micSelect.value;
       var constraints = deviceId
@@ -3638,7 +3744,7 @@
         document.body.appendChild(previewAudio);
       }
       var sent = false;
-      var previewDc = pcLocal.createDataChannel('oai-events', { negotiated: true, id: 0 });
+      var previewDc = createVoiceDataChannel(pcLocal);
       function sendPreviewIfReady() {
         if (sent || previewDc.readyState !== 'open' || !pcLocal.remoteDescription) return;
         var message = buildBaseUserMessage({
@@ -3662,7 +3768,7 @@
         previewAudio.srcObject = stream;
         playPreviewAudio();
       };
-      var offer = await pcLocal.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+      var offer = await pcLocal.createOffer(voiceOfferOptions());
       await pcLocal.setLocalDescription(offer);
       await new Promise(function (resolve) {
         if (pcLocal.iceGatheringState === 'complete') return resolve();
@@ -3679,7 +3785,7 @@
         body: JSON.stringify({
           offer_sdp: pcLocal.localDescription.sdp,
           voice: normalizeVoice(voice),
-          voice_mode: 'wingman',
+          voice_mode: (document.getElementById('voiceMode').value || gatewayVoiceDefaults.voice_mode).trim(),
           language_code: normalizeLanguage(languageEl && languageEl.value)
         })
       });
@@ -3824,7 +3930,7 @@
     try {
       var message = buildBaseUserMessage({
         content_type: 'text',
-        parts: [withCurrentSessionContext(text)]
+        parts: [text]
       });
       sendRelayMessage(message);
       parentMessageId = message.id;
@@ -3956,7 +4062,7 @@
         } else {
           setWaveLevel('remote', rms);
           // Hold remote speaking state through short pauses in the assistant audio.
-          if (inCall && !playbackSuppressed && rms > 0.08) {
+          if (inCall && !playbackSuppressed && !speakerMuted && rms > 0.08) {
             remoteSpeakingUntil = Date.now() + 900;
             markAssistantSpeaking();
             if (statusText.textContent !== t('statusSpeaking')) setUIKey('speaking', 'statusSpeaking', 'subSpeaking');
@@ -4010,7 +4116,12 @@
     try {
       await ensureCtx();
       if (!remoteAudio.srcObject) return;
-      if (playbackSuppressed && !force) return;
+      if ((playbackSuppressed || speakerMuted) && !force) return;
+      if (force) {
+        speakerMuted = false;
+        playbackSuppressed = false;
+        updateCallControls();
+      }
       remoteAudio.muted = false;
       remoteAudio.volume = 1;
       var p = remoteAudio.play();
@@ -4029,27 +4140,21 @@
       await stopVoicePreviewOnly();
       setUIKey('connecting', 'statusConnecting', 'subMic');
       await stopCall(false);
-      await prepareNewCallSession();
+      await prepareCallSession();
       updateTranscriptMeta();
 
       localStream = await requestMic();
       setUIKey('connecting', 'statusConnecting', 'subEstablishing');
 
-      pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' }
-        ],
-        bundlePolicy: 'max-bundle'
-      });
+      pc = newVoicePeerConnection();
 
       try {
-        var dc = pc.createDataChannel('oai-events', { negotiated: true, id: 0 });
+        var dc = createVoiceDataChannel(pc);
         dcChannel = dc;
         dc.onopen = function () {
           log('dc open');
           updateComposerState();
-          setTimeout(sendVoicePreviewGreeting, 700);
+          setTimeout(onVoiceChannelReady, 700);
         };
         dc.onclose = function () {
           log('dc close');
@@ -4112,14 +4217,14 @@
           inCall = true;
           beginAutoInterruptCalibration();
           setUIKey('listening', 'statusListening', 'subConnected');
-          setTimeout(sendVoicePreviewGreeting, 700);
+          setTimeout(onVoiceChannelReady, 700);
         }
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           if (inCall) setUIKey('error', 'statusDisconnected', 'subCallEnded');
         }
       };
 
-      var offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+      var offer = await pc.createOffer(voiceOfferOptions());
       await pc.setLocalDescription(offer);
       await new Promise(function (resolve) {
         if (pc.iceGatheringState === 'complete') return resolve();
@@ -4137,7 +4242,7 @@
         body: JSON.stringify({
           offer_sdp: pc.localDescription.sdp,
           voice: normalizeVoice(voiceEl.value),
-          voice_mode: (document.getElementById('voiceMode').value || 'wingman').trim(),
+          voice_mode: (document.getElementById('voiceMode').value || gatewayVoiceDefaults.voice_mode).trim(),
           language_code: normalizeLanguage(languageEl && languageEl.value),
           voice_session_id: voiceSessionId
         })
@@ -4157,7 +4262,7 @@
       inCall = true;
       setUIKey('connecting', 'statusConnecting', 'subEntering');
       await ensureRemotePlay();
-      setTimeout(sendVoicePreviewGreeting, 700);
+      setTimeout(onVoiceChannelReady, 700);
     } catch (e) {
       log('start error', String(e));
       setUI('error', t('statusStartFail'), String(e.message || e), 'statusStartFail', '', null, null);
@@ -4188,6 +4293,7 @@
     setWaveLevel('remote', 0);
     inCall = false;
     muted = false;
+    speakerMuted = false;
     sending = false;
     remoteSpeakingUntil = 0;
     assistantSpeaking = false;
@@ -4205,6 +4311,7 @@
     streamingCaptionRole = '';
     streamingCaptionText = '';
     streamingCaptionMessageId = '';
+    if (remoteAudio) remoteAudio.muted = false;
     await releaseBackendVoiceSession();
     updateCallControls();
     if (updateText) setUIKey('idle', 'statusReady', 'subReady');
@@ -4406,17 +4513,7 @@
       else startCall();
     };
     btnMute.onclick = toggleMute;
-    btnSpeaker.onclick = function () {
-      ensureRemotePlay(true);
-      if (btnSpeaker) {
-        btnSpeaker.classList.add('is-unlocked');
-        setTimeout(function () {
-          if (btnSpeaker) btnSpeaker.classList.remove('is-unlocked');
-          updateCallControls();
-        }, 1200);
-      }
-      toast(t('toastUnlockAudio'));
-    };
+    btnSpeaker.onclick = toggleSpeaker;
     interruptSensitivity.onchange = function () {
       beginAutoInterruptCalibration();
       toast(inCall ? t('toastSensitivityInCall') : t('toastSensitivity'));
@@ -4457,11 +4554,11 @@
       startVoicePreviewOnly(voiceEl.value);
     };
     if (languageEl) {
-      var savedLanguage = 'auto';
+      var savedLanguage = gatewayVoiceDefaults.language_code;
       try {
-        savedLanguage = normalizeLanguage(localStorage.getItem(languageStorageKey) || languageEl.value || 'auto');
+        savedLanguage = normalizeLanguage(localStorage.getItem(languageStorageKey) || languageEl.value || gatewayVoiceDefaults.language_code);
       } catch (e) {
-        savedLanguage = normalizeLanguage(languageEl.value || 'auto');
+        savedLanguage = normalizeLanguage(languageEl.value || gatewayVoiceDefaults.language_code);
       }
       setLanguageValue(savedLanguage, false);
     }
@@ -4474,7 +4571,10 @@
     setTimeout(warmMicPermission, 600);
   }
 
-  try { bind(); }
+  try {
+    bind();
+    loadGatewayVoiceConfig().catch(function () {});
+  }
   catch (e) {
     statusText.textContent = t('statusPageError');
     subText.textContent = String(e);
