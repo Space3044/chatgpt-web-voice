@@ -1,0 +1,11 @@
+{
+  "remote.autoForwardPorts": true,
+  "remote.autoForwardPortsSource": "hybrid",
+  "remote.portsAttributes": {
+    "8090": {
+      "label": "chatgpt-web-voice",
+      "onAutoForward": "notify",
+      "elevateIfNeeded": false
+    }
+  }
+}

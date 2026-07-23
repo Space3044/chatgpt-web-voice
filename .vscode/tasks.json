@@ -1,0 +1,58 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "voice: run server",
+      "type": "shell",
+      "command": "bash -lc 'set -a; source .env; set +a; exec go run ./cmd/server'",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "VOICE_LISTEN_ADDR": "0.0.0.0:8090"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "chatgpt-web-voice",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "configuration_loaded",
+          "endsPattern": "server_listening"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "voice: run server (TLS)",
+      "type": "shell",
+      "command": "bash -lc 'set -a; source .env; set +a; exec go run ./cmd/server'",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "VOICE_LISTEN_ADDR": "0.0.0.0:8090",
+          "VOICE_TLS": "true"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "chatgpt-web-voice",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "configuration_loaded",
+          "endsPattern": "server_listening"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    }
+  ]
+}

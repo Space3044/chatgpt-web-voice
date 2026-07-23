@@ -1,0 +1,42 @@
+services:
+  chatgpt-web-voice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
+    ports:
+      - "${VOICE_PORT:-8090}:8090"
+    environment:
+      # The image runs in production mode and serves internal HTTP. Put
+      # HTTPS termination in the reverse proxy in front of this container.
+      VOICE_AUTH_USERNAME: ${VOICE_AUTH_USERNAME:?VOICE_AUTH_USERNAME is required}
+      VOICE_AUTH_PASSWORD: ${VOICE_AUTH_PASSWORD:?VOICE_AUTH_PASSWORD is required}
+      VOICE_LOG_LEVEL: ${VOICE_LOG_LEVEL:-info}
+    volumes:
+      # SQLite database and optional legacy accounts.json migration input
+      # persist on the host.
+      - ./data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          AUTH="$$(printf '%s:%s' "$${VOICE_AUTH_USERNAME}" "$${VOICE_AUTH_PASSWORD}" | base64 | tr -d '\n')";
+          wget -q -T 3 --header="Authorization: Basic $${AUTH}" -O /dev/null "http://127.0.0.1:8090/api/voice/health"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

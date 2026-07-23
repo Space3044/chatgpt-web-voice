@@ -1,0 +1,35 @@
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Runtime data and credentials
+data/accounts*.json
+data/*.db*
+data/*.sqlite*
+data/certs/
+
+# Build and test output
+bin/
+dist/
+coverage/
+coverage.out
+*.prof
+*.test
+*.exe
+/chatgpt-web-voice
+/server
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
+.cache/
+
+# Local tooling and editor metadata
+.agents/
+.codex/
+.playwright-cli/
+.DS_Store
+*.swp
+*~

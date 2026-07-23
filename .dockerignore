@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+data/accounts*.json
+data/*.db
+data/*.db-*
+data/certs/
+*.log
+bin/
+dist/
