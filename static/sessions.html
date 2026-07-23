@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>会话记录 · Voice Gateway</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310a37f'/%3E%3Cpath d='M16 34h8l4-14 8 27 5-18h7' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/app.css" />
+  <script>
+    (function () {
+      try {
+        var theme = localStorage.getItem('chatgpt_web_voice_theme_v1');
+        if (theme !== 'light' && theme !== 'dark') theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/voice">
+      <span class="brand-mark">SS</span>
+      <span class="brand-title">会话记录</span>
+    </a>
+    <div class="top-actions">
+      <button type="button" class="header-chip" id="themeButton" title="主题">主题</button>
+      <a class="nav-link" href="/accounts">账号池</a>
+      <a class="nav-link" href="/keys">API 密钥</a>
+      <a class="nav-link active" href="/sessions" aria-current="page">会话记录</a>
+      <a class="nav-link" href="/voice">语音通话</a>
+      <button type="button" class="nav-link" id="logoutButton">退出</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <div class="page-head">
+      <div>
+        <h1>语音会话记录</h1>
+        <p class="page-sub">只记录网关侧元数据：会话 id、调用方、粘性账号邮箱、上游会话 id、创建/结束时间。不展示、不保存聊天正文或字幕。</p>
+      </div>
+      <button type="button" class="btn" id="refreshButton">刷新</button>
+    </div>
+
+    <div class="note">
+      <span class="note-mark">META</span>
+      <div>
+        <strong>调用方标识</strong>
+        内置语音页 / 管理端记为 <code>admin</code>；下游 Bearer key 记为密钥名称。账号列显示池内粘性账号邮箱。
+      </div>
+    </div>
+
+    <div class="stats">
+      <span class="stat-pill"><strong id="totalCount">0</strong><span>全部</span></span>
+      <span class="stat-pill"><strong id="activeCount">0</strong><span>活跃</span></span>
+      <span class="stat-pill"><strong id="releasedCount">0</strong><span>已释放</span></span>
+      <span class="stat-pill"><strong id="adminCount">0</strong><span>admin</span></span>
+      <span class="stat-pill"><strong id="apiKeyCount">0</strong><span>下游 key</span></span>
+    </div>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div class="filters">
+          <div class="search">
+            <input id="searchInput" type="search" autocomplete="off" placeholder="搜索会话 id / 调用方 / 账号邮箱…" />
+          </div>
+          <select id="callerFilter" aria-label="调用方">
+            <option value="all">全部来源</option>
+            <option value="admin">admin</option>
+            <option value="api_key">下游 key</option>
+          </select>
+          <select id="statusFilter" aria-label="状态">
+            <option value="all">全部状态</option>
+            <option value="active">活跃</option>
+            <option value="released">已释放</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap" id="tableWrap">
+        <table class="sessions-table">
+          <thead>
+            <tr>
+              <th class="col-id">记录 ID</th>
+              <th class="col-caller">调用方</th>
+              <th class="col-status">状态</th>
+              <th class="col-account">账号</th>
+              <th class="col-upstream">上游会话</th>
+              <th class="col-voice">语音参数</th>
+              <th class="col-time">时间</th>
+              <th class="col-actions">操作</th>
+            </tr>
+          </thead>
+          <tbody id="sessionRows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="emptyState">
+        <strong id="emptyTitle">暂无会话记录</strong>
+        <span id="emptyText">成功建立语音 SDP 后会出现在这里。</span>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    (function () {
+      var sessions = [];
+      var stats = { total: 0, active: 0, released: 0, admin: 0, api_key: 0 };
+      var rows = document.getElementById('sessionRows');
+      var tableWrap = document.getElementById('tableWrap');
+      var emptyState = document.getElementById('emptyState');
+      var searchInput = document.getElementById('searchInput');
+      var callerFilter = document.getElementById('callerFilter');
+      var statusFilter = document.getElementById('statusFilter');
+      var toast = document.getElementById('toast');
+      var toastTimer = 0;
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2200);
+      }
+
+      function escapeHTML(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function formatDate(value) {
+        if (!value) return '—';
+        var raw = String(value);
+        var date = new Date(raw.indexOf('T') >= 0 ? raw : raw.replace(' ', 'T') + 'Z');
+        if (Number.isNaN(date.getTime())) return raw;
+        return new Intl.DateTimeFormat('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        }).format(date);
+      }
+
+      function shortID(value, head, tail) {
+        var text = String(value || '');
+        if (!text) return '—';
+        head = head || 10;
+        tail = tail || 6;
+        if (text.length <= head + tail + 1) return text;
+        return text.slice(0, head) + '…' + text.slice(-tail);
+      }
+
+      async function apiFetch(url, options) {
+        options = options || {};
+        options.credentials = 'same-origin';
+        var response = await fetch(url, options);
+        var data = null;
+        try { data = await response.json(); } catch (e) {}
+        if (response.status === 401) {
+          window.location.replace('/login');
+          throw new Error('登录已过期');
+        }
+        if (!response.ok) {
+          var message = data && data.detail && data.detail.error;
+          throw new Error(message || ('HTTP ' + response.status));
+        }
+        return data || {};
+      }
+
+      function renderRow(item) {
+        var callerKind = item.caller_kind === 'api_key' ? 'api_key' : 'admin';
+        var callerText = callerKind === 'admin'
+          ? 'admin'
+          : (item.caller_label || item.api_key_name || ('key#' + (item.api_key_id || '—')));
+        var statusClass = item.status === 'released' ? 'released' : '';
+        var statusText = item.status === 'released' ? '已释放' : '活跃';
+        var voice = item.voice || '—';
+        var mode = item.voice_mode || '—';
+        var lang = item.language_code || '—';
+        var accountEmail = String(item.account_email || '').trim();
+        var accountText = accountEmail || (item.account_id ? ('#' + item.account_id) : '—');
+        var vsID = item.voice_session_id || '';
+        var upstreamID = item.upstream_conversation_id || item.upstream_voice_session_id || '';
+        var endedAt = item.released_at || '';
+        var endText = endedAt ? formatDate(endedAt) : (item.status === 'released' ? '—' : '进行中');
+
+        return '<tr data-id="' + escapeHTML(vsID) + '">' +
+          '<td data-label="记录 ID">' +
+            '<span class="id-chip mono" title="' + escapeHTML(vsID) + '">' + escapeHTML(shortID(vsID, 12, 6)) + '</span>' +
+          '</td>' +
+          '<td data-label="调用方">' +
+            '<span class="caller-text" title="' + escapeHTML(callerText) + '">' + escapeHTML(callerText) + '</span>' +
+          '</td>' +
+          '<td data-label="状态"><span class="badge ' + statusClass + '">' + escapeHTML(statusText) + '</span></td>' +
+          '<td data-label="账号">' +
+            '<span class="account-text" title="' + escapeHTML(accountText) + '">' + escapeHTML(accountText) + '</span>' +
+          '</td>' +
+          '<td data-label="上游会话">' +
+            '<span class="id-chip mono" title="' + escapeHTML(upstreamID || '—') + '">' + escapeHTML(shortID(upstreamID, 10, 6)) + '</span>' +
+          '</td>' +
+          '<td data-label="语音参数"><div class="param-list">' +
+            '<span><strong>' + escapeHTML(voice) + '</strong></span>' +
+            '<span>' + escapeHTML(mode) + '</span>' +
+            '<span>' + escapeHTML(lang) + '</span>' +
+          '</div></td>' +
+          '<td data-label="时间"><div class="time-list">' +
+            '<span class="time-k" title="创建时间">创建</span><span class="time-v">' + escapeHTML(formatDate(item.created_at)) + '</span>' +
+            '<span class="time-k" title="结束时间">结束</span><span class="time-v">' + escapeHTML(endText) + '</span>' +
+          '</div></td>' +
+          '<td data-label="操作"><div class="actions">' +
+            '<button type="button" class="btn btn-small" data-action="copy" data-id="' + escapeHTML(vsID) + '">复制</button>' +
+            '<button type="button" class="btn btn-small btn-danger" data-action="delete" data-id="' + escapeHTML(vsID) + '">删除</button>' +
+          '</div></td></tr>';
+      }
+
+      function render() {
+        document.getElementById('totalCount').textContent = stats.total || 0;
+        document.getElementById('activeCount').textContent = stats.active || 0;
+        document.getElementById('releasedCount').textContent = stats.released || 0;
+        document.getElementById('adminCount').textContent = stats.admin || 0;
+        document.getElementById('apiKeyCount').textContent = stats.api_key || 0;
+        rows.innerHTML = sessions.map(renderRow).join('');
+        tableWrap.style.display = sessions.length ? 'block' : 'none';
+        emptyState.classList.toggle('show', !sessions.length);
+        document.getElementById('emptyTitle').textContent = '暂无会话记录';
+        document.getElementById('emptyText').textContent = '成功建立语音 SDP 后会出现在这里。';
+      }
+
+      async function loadSessions(showMessage) {
+        var params = new URLSearchParams();
+        var q = searchInput.value.trim();
+        if (q) params.set('q', q);
+        if (callerFilter.value && callerFilter.value !== 'all') params.set('caller', callerFilter.value);
+        if (statusFilter.value && statusFilter.value !== 'all') params.set('status', statusFilter.value);
+        params.set('limit', '300');
+        try {
+          var data = await apiFetch('/api/call-sessions?' + params.toString());
+          sessions = Array.isArray(data.sessions) ? data.sessions : [];
+          stats = data.stats || stats;
+          render();
+          if (showMessage) showToast('已刷新');
+        } catch (error) {
+          showToast('加载失败: ' + error.message);
+        }
+      }
+
+      async function copyText(value) {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(value);
+          } else {
+            var input = document.createElement('input');
+            input.value = value;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+          }
+          showToast('已复制');
+        } catch (e) {
+          showToast('复制失败');
+        }
+      }
+
+      document.getElementById('refreshButton').addEventListener('click', function () {
+        loadSessions(true);
+      });
+      searchInput.addEventListener('input', function () {
+        clearTimeout(searchInput._timer);
+        searchInput._timer = setTimeout(function () { loadSessions(false); }, 250);
+      });
+      callerFilter.addEventListener('change', function () { loadSessions(false); });
+      statusFilter.addEventListener('change', function () { loadSessions(false); });
+
+      rows.addEventListener('click', async function (event) {
+        var button = event.target.closest('button[data-action]');
+        if (!button) return;
+        var id = button.getAttribute('data-id') || '';
+        var action = button.getAttribute('data-action');
+        if (action === 'copy') {
+          await copyText(id);
+          return;
+        }
+        if (action === 'delete') {
+          if (!window.confirm('删除这条元数据记录？不会中断已建立的 WebRTC，也不会删除本地聊天历史。')) return;
+          try {
+            await apiFetch('/api/call-sessions/' + encodeURIComponent(id), { method: 'DELETE' });
+            showToast('已删除');
+            await loadSessions(false);
+          } catch (error) {
+            showToast('删除失败: ' + error.message);
+          }
+        }
+      });
+
+      document.getElementById('logoutButton').addEventListener('click', async function () {
+        try {
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+        } catch (e) {}
+        window.location.replace('/login');
+      });
+
+      document.getElementById('themeButton').addEventListener('click', function () {
+        var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('chatgpt_web_voice_theme_v1', next); } catch (e) {}
+        document.getElementById('themeButton').textContent = next === 'dark' ? '深色' : '浅色';
+      });
+      document.getElementById('themeButton').textContent =
+        document.documentElement.getAttribute('data-theme') === 'dark' ? '深色' : '浅色';
+
+      loadSessions(false);
+    })();
+  </script>
+</body>
+</html>

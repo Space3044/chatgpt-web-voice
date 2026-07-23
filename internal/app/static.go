@@ -6,12 +6,16 @@ import (
 	"path/filepath"
 )
 
-func registerStaticRoutes(mux *http.ServeMux, staticDir string) {
+// registerPublicStaticAssets serves CSS/JS/asset files under /static/ without
+// authentication so the login page can load the shared design system.
+func registerPublicStaticAssets(mux *http.ServeMux, staticDir string) {
 	if info, err := os.Stat(staticDir); err == nil && info.IsDir() {
 		fileServer := http.FileServer(http.Dir(staticDir))
 		mux.Handle("GET /static/", http.StripPrefix("/static/", fileServer))
 	}
+}
 
+func registerStaticRoutes(mux *http.ServeMux, staticDir string) {
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -28,6 +32,9 @@ func registerStaticRoutes(mux *http.ServeMux, staticDir string) {
 	mux.HandleFunc("GET /keys", func(w http.ResponseWriter, r *http.Request) {
 		serveFile(w, r, joinStatic(staticDir, "keys.html"))
 	})
+	mux.HandleFunc("GET /sessions", func(w http.ResponseWriter, r *http.Request) {
+		serveFile(w, r, joinStatic(staticDir, "sessions.html"))
+	})
 	// Keep the former file-suffixed URLs as canonical redirects for bookmarks
 	// and external links created before clean routes were introduced.
 	mux.HandleFunc("GET /voice.html", func(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +45,9 @@ func registerStaticRoutes(mux *http.ServeMux, staticDir string) {
 	})
 	mux.HandleFunc("GET /keys.html", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/keys", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("GET /sessions.html", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/sessions", http.StatusMovedPermanently)
 	})
 }
 

@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>API 密钥 · Voice Gateway</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310a37f'/%3E%3Cpath d='M16 34h8l4-14 8 27 5-18h7' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/app.css" />
   <script>
     (function () {
       try {
@@ -16,209 +20,6 @@
       }
     })();
   </script>
-  <style>
-    :root {
-      color-scheme: light;
-      --bg: #fff;
-      --surface: #fff;
-      --surface-2: #f7f7f8;
-      --ink: #111113;
-      --muted: #6b6b73;
-      --line: #ebebef;
-      --green: #10a37f;
-      --green-dark: #0d8c6d;
-      --green-soft: rgba(16, 163, 127, .11);
-      --red: #e11d48;
-      --red-soft: rgba(225, 29, 72, .08);
-      --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
-      --focus: 0 0 0 3px rgba(16,163,127,.22);
-      --topbar-bg: rgba(255,255,255,.92);
-      --chip-bg: #fff;
-      --chip-hover: #f0f0f2;
-      --row-hover: #fafafa;
-      --input-bg: #fff;
-      --dialog-backdrop: rgba(15,15,18,.42);
-    }
-    html[data-theme="dark"] {
-      color-scheme: dark;
-      --bg: #0f0f10;
-      --surface: #161618;
-      --surface-2: #1c1c1f;
-      --ink: #f4f4f5;
-      --muted: #a1a1aa;
-      --line: #2a2a2e;
-      --green-dark: #35c89f;
-      --green-soft: rgba(16,163,127,.18);
-      --red: #fb7185;
-      --red-soft: rgba(251,113,133,.12);
-      --shadow: 0 1px 2px rgba(0,0,0,.25), 0 12px 32px rgba(0,0,0,.35);
-      --focus: 0 0 0 3px rgba(16,163,127,.32);
-      --topbar-bg: rgba(15,15,16,.92);
-      --chip-bg: #1c1c1f;
-      --chip-hover: #26262a;
-      --row-hover: #1a1a1d;
-      --input-bg: #1c1c1f;
-      --dialog-backdrop: rgba(0,0,0,.58);
-    }
-    * { box-sizing: border-box; }
-    html, body { min-height: 100%; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--ink);
-      background: var(--bg);
-      font-family: "Inter", "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
-    }
-    button, input { font: inherit; }
-    button:focus-visible, input:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus); }
-    .topbar {
-      position: sticky; top: 0; z-index: 30;
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 12px 20px;
-      background: var(--topbar-bg); border-bottom: 1px solid var(--line);
-      backdrop-filter: blur(12px);
-    }
-    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 0; color: var(--ink); text-decoration: none; }
-    .brand-mark {
-      width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto;
-      display: grid; place-items: center; background: var(--green); color: #fff;
-      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    .brand-title { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
-    .top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; flex: 1 1 0; }
-    .header-chip, .nav-link, .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px;
-      background: var(--chip-bg); color: var(--ink); text-decoration: none;
-      font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
-    }
-    .header-chip:hover, .nav-link:hover, .btn:hover { background: var(--chip-hover); }
-    .btn-primary { color: #fff; border-color: transparent; background: var(--green); }
-    .btn-primary:hover { background: var(--green-dark); border-color: transparent; }
-    .btn-danger { color: var(--red); }
-    .btn-danger:hover { background: var(--red-soft); border-color: transparent; }
-    .btn-small { min-height: 30px; padding: 0 10px; border-radius: 8px; font-size: 11px; }
-    .layout { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 48px; }
-    .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-    .page-head h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.03em; }
-    .key-note {
-      display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; padding: 13px 14px;
-      border: 1px solid rgba(16,163,127,.28); border-left: 4px solid var(--green); border-radius: 11px;
-      background: var(--green-soft); color: var(--muted); font-size: 12px; line-height: 1.55;
-    }
-    .key-note strong { display: block; margin-bottom: 2px; color: var(--ink); font-size: 12px; }
-    .note-mark { flex: 0 0 auto; color: var(--green-dark); font: 700 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-    .stat-pill {
-      display: inline-flex; align-items: baseline; gap: 6px; padding: 7px 11px;
-      border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2);
-      color: var(--muted); font-size: 12px;
-    }
-    .stat-pill strong { color: var(--ink); font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-    .search { position: relative; flex: 1; max-width: 360px; }
-    .search::before { content: "⌕"; position: absolute; left: 12px; top: 50%; transform: translateY(-52%); color: var(--muted); pointer-events: none; }
-    .search input {
-      width: 100%; height: 36px; padding: 0 12px 0 34px; border: 1px solid var(--line); border-radius: 9px;
-      background: var(--input-bg); color: var(--ink); outline: none;
-    }
-    .search input:focus { border-color: var(--green); box-shadow: var(--focus); }
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-    th {
-      padding: 13px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2);
-      color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: center;
-    }
-    th:nth-child(1) { width: 23%; }
-    th:nth-child(2) { width: 19%; }
-    th:nth-child(3) { width: 11%; }
-    th:nth-child(4), th:nth-child(5) { width: 15%; }
-    th:nth-child(6) { width: 17%; }
-    td { padding: 14px 12px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; font-size: 13px; }
-    tbody tr:last-child td { border-bottom: 0; }
-    tbody tr:hover { background: var(--row-hover); }
-    tbody tr.disabled { opacity: .72; }
-    .cell-stack { display: grid; justify-items: center; gap: 5px; min-width: 0; }
-    .cell-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
-    .cell-meta { color: var(--muted); font-size: 11px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .prefix {
-      display: inline-flex; max-width: 100%; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px;
-      background: var(--surface-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .badge { display: inline-flex; padding: 4px 8px; border-radius: 999px; color: var(--green-dark); background: var(--green-soft); font-size: 11px; font-weight: 650; }
-    .badge.disabled { color: var(--red); background: var(--red-soft); }
-    .actions { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
-    .empty { display: none; padding: 52px 20px; text-align: center; color: var(--muted); }
-    .empty.show { display: grid; gap: 6px; }
-    .empty strong { color: var(--ink); font-size: 14px; }
-    dialog {
-      width: min(440px, calc(100% - 28px)); padding: 0; border: 1px solid var(--line); border-radius: 15px;
-      background: var(--surface); color: var(--ink); box-shadow: 0 24px 70px rgba(0,0,0,.28);
-    }
-    dialog::backdrop { background: var(--dialog-backdrop); backdrop-filter: blur(2px); }
-    .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
-    .dialog-head h2 { margin: 0; font-size: 16px; letter-spacing: -.02em; }
-    .dialog-close { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font-size: 20px; }
-    .dialog-close:hover { background: var(--surface-2); color: var(--ink); }
-    .dialog-body { padding: 18px; }
-    .field { display: grid; gap: 7px; }
-    .field label { color: var(--muted); font-size: 12px; font-weight: 650; }
-    .field input {
-      width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px;
-      background: var(--input-bg); color: var(--ink); outline: none;
-    }
-    .field input:focus { border-color: var(--green); box-shadow: var(--focus); }
-    .field-hint, .form-message { color: var(--muted); font-size: 11px; line-height: 1.45; }
-    .form-message { color: var(--red); }
-    .dialog-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px; border-top: 1px solid var(--line); }
-    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-left: auto; }
-    .secret-callout {
-      display: grid; gap: 10px; padding: 14px; border: 1px solid rgba(16,163,127,.32); border-radius: 11px;
-      background: var(--green-soft);
-    }
-    .secret-callout strong { font-size: 13px; }
-    .secret-callout p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-    .secret-row { display: flex; gap: 8px; align-items: stretch; }
-    .secret-value {
-      min-width: 0; flex: 1; padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px;
-      background: var(--surface); color: var(--ink); font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    .toast {
-      position: fixed; left: 50%; bottom: 24px; z-index: 80; transform: translate(-50%, 16px);
-      max-width: min(520px, calc(100% - 32px)); padding: 10px 14px; border: 1px solid rgba(16,163,127,.3); border-radius: 10px;
-      background: var(--surface); color: var(--ink); box-shadow: var(--shadow); opacity: 0; pointer-events: none;
-      font-size: 12px; transition: opacity .16s ease, transform .16s ease;
-    }
-    .toast.show { opacity: 1; transform: translate(-50%, 0); }
-    @media (max-width: 760px) {
-      .topbar { padding: 10px 12px; }
-      .top-actions .nav-link[href="/voice"] { display: none; }
-      .layout { width: min(100% - 24px, 1040px); padding-top: 18px; }
-      .page-head { align-items: flex-start; }
-      .toolbar { align-items: stretch; }
-      .search { max-width: none; }
-      thead { display: none; }
-      table, tbody, tr, td { display: block; width: 100%; }
-      tbody tr { padding: 8px 12px; border-bottom: 1px solid var(--line); }
-      tbody tr:last-child { border-bottom: 0; }
-      td { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 0; border: 0; text-align: right; }
-      td::before { content: attr(data-label); color: var(--muted); font-size: 11px; font-weight: 650; text-align: left; }
-      .cell-stack { justify-items: end; }
-      .actions { justify-content: flex-end; }
-    }
-    @media (max-width: 520px) {
-      .brand-title, .header-chip { display: none; }
-      .top-actions { flex: 0 0 auto; }
-      .page-head h1 { font-size: 20px; }
-      .secret-row { flex-direction: column; }
-      .dialog-foot { align-items: stretch; flex-direction: column; }
-      .dialog-actions { width: 100%; }
-      .dialog-actions .btn { flex: 1; }
-    }
-    @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
-  </style>
 </head>
 <body>
   <header class="topbar">
@@ -230,6 +31,8 @@
       <button type="button" class="header-chip" id="localeButton" title="语言" aria-label="语言">中文</button>
       <button type="button" class="header-chip" id="themeButton" title="主题" aria-label="主题">浅色</button>
       <a class="nav-link" href="/accounts" data-i18n="accounts">账号池</a>
+      <a class="nav-link active" href="/keys" aria-current="page" data-i18n="brandTitle">API 密钥</a>
+      <a class="nav-link" href="/sessions">会话记录</a>
       <a class="nav-link" href="/voice" data-i18n="voice">语音通话</a>
       <button type="button" class="nav-link" id="logoutButton" data-i18n="logout">退出</button>
     </div>
@@ -258,7 +61,7 @@
         <button type="button" class="btn" id="refreshButton" data-i18n="refresh">刷新</button>
       </div>
       <div class="table-wrap" id="tableWrap">
-        <table>
+        <table class="keys-table">
           <thead><tr>
             <th data-i18n="columnName">名称</th>
             <th data-i18n="columnPrefix">密钥前缀</th>

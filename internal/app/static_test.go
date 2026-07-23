@@ -20,14 +20,23 @@ func TestRegisterStaticRoutesUsesCleanURLs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(staticDir, "keys.html"), []byte("keys page"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(staticDir, "sessions.html"), []byte("sessions page"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staticDir, "app.css"), []byte("/* design system */"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	mux := http.NewServeMux()
+	registerPublicStaticAssets(mux, staticDir)
 	registerStaticRoutes(mux, staticDir)
 
 	for path, wantBody := range map[string]string{
-		"/voice":    "voice page",
-		"/accounts": "accounts page",
-		"/keys":     "keys page",
+		"/voice":        "voice page",
+		"/accounts":     "accounts page",
+		"/keys":         "keys page",
+		"/sessions":     "sessions page",
+		"/static/app.css": "/* design system */",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		resp := httptest.NewRecorder()
@@ -38,10 +47,11 @@ func TestRegisterStaticRoutesUsesCleanURLs(t *testing.T) {
 	}
 
 	for path, location := range map[string]string{
-		"/":              "/voice",
-		"/voice.html":    "/voice",
-		"/accounts.html": "/accounts",
-		"/keys.html":     "/keys",
+		"/":               "/voice",
+		"/voice.html":     "/voice",
+		"/accounts.html":  "/accounts",
+		"/keys.html":      "/keys",
+		"/sessions.html":  "/sessions",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		resp := httptest.NewRecorder()

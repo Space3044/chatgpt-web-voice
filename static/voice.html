@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>语音通话</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310a37f'/%3E%3Cpath d='M16 34h8l4-14 8 27 5-18h7' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script>
     (function () {
       try {
@@ -19,308 +22,6 @@
       }
     })();
   </script>
-  <style>
-    :root {
-      color-scheme: light;
-      --fog: #f1f5f3;
-      --paper: #ffffff;
-      --ink: #0b1714;
-      --muted: #66756f;
-      --line: #d9e3de;
-      --green: #10a37f;
-      --green-dark: #0b7f64;
-      --green-soft: rgba(16, 163, 127, .12);
-      --red: #e14b4b;
-      --red-dark: #c43333;
-      --shadow: 0 24px 70px rgba(11, 40, 32, .10);
-      --radius-xl: 28px;
-      --radius: 14px;
-      --focus: 0 0 0 3px rgba(16, 163, 127, .22);
-    }
-    * { box-sizing: border-box; }
-    html, body { min-height: 100%; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--ink);
-      font-family: "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
-      background:
-        radial-gradient(900px 420px at 12% -8%, rgba(16, 163, 127, .16), transparent 60%),
-        radial-gradient(700px 380px at 100% 0%, rgba(11, 23, 20, .05), transparent 55%),
-        linear-gradient(rgba(11, 23, 20, .03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(11, 23, 20, .03) 1px, transparent 1px),
-        var(--fog);
-      background-size: auto, auto, 28px 28px, 28px 28px, auto;
-    }
-    button, select, textarea, input { font: inherit; }
-    button:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
-      outline: none;
-      box-shadow: var(--focus);
-    }
-    .topbar {
-      position: sticky; top: 0; z-index: 30;
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 14px 18px;
-      backdrop-filter: blur(12px);
-      background: rgba(241, 245, 243, .82);
-      border-bottom: 1px solid rgba(217, 227, 222, .8);
-    }
-    .brand {
-      display: flex; align-items: center; gap: 10px; min-width: 0;
-      color: var(--ink); text-decoration: none;
-    }
-    .brand-mark {
-      width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
-      display: grid; place-items: center;
-      background: linear-gradient(145deg, #1cc79b, #0b7f64);
-      color: #fff; font-size: 13px; font-weight: 700;
-      box-shadow: 0 8px 18px rgba(16, 163, 127, .28);
-    }
-    .brand-text { min-width: 0; }
-    .brand-title {
-      font-size: 14px; font-weight: 700; letter-spacing: -.01em; line-height: 1.15;
-    }
-    .brand-sub {
-      font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .top-actions { display: flex; align-items: center; gap: 8px; }
-    .lang-switch {
-      display: inline-flex; padding: 3px; border-radius: 999px;
-      border: 1px solid var(--line); background: rgba(255,255,255,.88);
-    }
-    .lang-switch button {
-      border: 0; background: transparent; color: var(--muted);
-      border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 650;
-      cursor: pointer; line-height: 1;
-    }
-    .lang-switch button.active {
-      background: var(--ink); color: #fff;
-    }
-    .gh-link {
-      display: inline-flex; align-items: center; gap: 6px;
-      height: 34px; padding: 0 12px; border-radius: 999px;
-      border: 1px solid var(--line); background: rgba(255,255,255,.88);
-      color: var(--ink); text-decoration: none; font-size: 12px; font-weight: 600;
-    }
-    .gh-link:hover { border-color: var(--green); color: var(--green-dark); }
-    .wrap {
-      min-height: calc(100vh - 63px);
-      display: flex; justify-content: center;
-      padding: 22px 16px 36px;
-    }
-    .stage {
-      width: min(460px, 100%);
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow);
-      padding: 26px 22px 20px;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-    }
-    .stage::before {
-      content: "";
-      position: absolute; inset: 0 0 auto 0; height: 3px;
-      background: linear-gradient(90deg, transparent, var(--green), transparent);
-      opacity: .8;
-    }
-    .orb-wrap {
-      position: relative;
-      width: 220px; height: 220px;
-      margin: 4px auto 14px;
-      display: grid; place-items: center;
-    }
-    .orb-ring {
-      position: absolute; inset: 22px;
-      border-radius: 50%;
-      border: 1px solid rgba(16, 163, 127, .18);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
-      animation: ring 4.8s ease-in-out infinite;
-      pointer-events: none;
-    }
-    .orb {
-      width: 148px; height: 148px; border-radius: 50%;
-      background:
-        radial-gradient(circle at 34% 28%, #9bffe6 0%, #18c697 40%, #0b7f64 76%, #065244 100%);
-      box-shadow: 0 0 0 0 rgba(16,163,127,.28), 0 22px 48px rgba(16,163,127,.28);
-      transition: transform .25s ease, box-shadow .25s ease, filter .25s ease;
-    }
-    .orb.idle { animation: breath 2.8s ease-in-out infinite; }
-    .orb.listening { animation: pulse 1.6s ease-in-out infinite; }
-    .orb.speaking {
-      animation: speak .9s ease-in-out infinite;
-      box-shadow: 0 0 0 14px rgba(16,163,127,.12), 0 22px 56px rgba(16,163,127,.34);
-    }
-    .orb.connecting { filter: grayscale(.15) brightness(.96); animation: breath 1.2s ease-in-out infinite; }
-    .orb.error {
-      background: radial-gradient(circle at 35% 30%, #fecaca, #ef4444 58%, #991b1b);
-      box-shadow: 0 18px 40px rgba(225, 75, 75, .25);
-    }
-    @keyframes breath {
-      0%,100% { transform: scale(1); }
-      50% { transform: scale(1.04); }
-    }
-    @keyframes pulse {
-      0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16,163,127,.28); }
-      50% { transform: scale(1.06); box-shadow: 0 0 0 18px rgba(16,163,127,0); }
-    }
-    @keyframes speak {
-      0%,100% { transform: scale(1.02); }
-      50% { transform: scale(1.1); }
-    }
-    @keyframes ring {
-      0%,100% { transform: scale(1); opacity: .55; }
-      50% { transform: scale(1.03); opacity: 1; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .orb, .orb-ring { animation: none !important; }
-    }
-    .status {
-      font-size: 28px; font-weight: 700; letter-spacing: -.03em; margin: 0 0 6px;
-    }
-    .sub {
-      color: var(--muted); font-size: 14px; min-height: 20px; margin: 0 0 16px;
-    }
-    .meters {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
-    }
-    .meter-card {
-      background: linear-gradient(180deg, #fbfcfb, #f5f8f6);
-      border: 1px solid var(--line); border-radius: var(--radius); padding: 11px 12px;
-      text-align: left;
-    }
-    .meter-card span {
-      display: block; font-size: 11px; font-weight: 650; letter-spacing: .04em;
-      text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
-    }
-    meter {
-      width: 100%; height: 12px;
-      border: 0; background: #e7eeea; border-radius: 999px; overflow: hidden;
-    }
-    meter::-webkit-meter-bar { background: #e7eeea; border: 0; border-radius: 999px; }
-    meter::-webkit-meter-optimum-value { background: linear-gradient(90deg, #12b58b, #0b7f64); border-radius: 999px; }
-    meter::-moz-meter-bar { background: linear-gradient(90deg, #12b58b, #0b7f64); border-radius: 999px; }
-    .controls {
-      display: flex; justify-content: center; align-items: center; gap: 16px; margin: 10px 0 6px;
-    }
-    .btn-main {
-      width: 80px; height: 80px; border-radius: 50%; border: 0; cursor: pointer;
-      display: grid; place-items: center; font-size: 15px; font-weight: 700; color: #fff;
-      background: linear-gradient(160deg, #1cc79b, var(--green-dark));
-      box-shadow: 0 14px 28px rgba(16,163,127,.34);
-      transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
-    }
-    .btn-main:hover { filter: brightness(1.03); }
-    .btn-main:active { transform: scale(.97); }
-    .btn-main.stop {
-      background: linear-gradient(160deg, #f06a6a, var(--red-dark));
-      box-shadow: 0 14px 28px rgba(225,75,75,.28);
-    }
-    .btn-side {
-      width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--line);
-      background: #fff; cursor: pointer; color: var(--ink); font-size: 18px;
-      transition: background .15s ease, border-color .15s ease;
-    }
-    .btn-side:hover:not(:disabled) { border-color: #c5d5ce; background: #f8fbf9; }
-    .btn-side:disabled { opacity: .4; cursor: not-allowed; }
-    .device, .advanced, .composer, .transcript { text-align: left; }
-    .device { margin-top: 14px; }
-    .field-label {
-      display: block; font-size: 12px; font-weight: 650; color: var(--muted); margin-bottom: 6px;
-    }
-    select, input[type=password], input[type=text], textarea {
-      width: 100%; border: 1px solid var(--line); border-radius: 12px;
-      padding: 11px 12px; background: #fff; font-size: 14px; color: var(--ink);
-      transition: border-color .15s ease, box-shadow .15s ease;
-    }
-    select:hover, textarea:hover { border-color: #c7d6cf; }
-    .advanced {
-      margin-top: 12px;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: linear-gradient(180deg, #fcfdfc, #f7faf8);
-      overflow: hidden;
-    }
-    .advanced summary {
-      list-style: none; cursor: pointer; user-select: none;
-      padding: 12px 14px; color: var(--ink); font-size: 13px; font-weight: 650;
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    }
-    .advanced summary::-webkit-details-marker { display: none; }
-    .advanced summary::after {
-      content: "+"; color: var(--muted); font-size: 16px; font-weight: 500; line-height: 1;
-    }
-    .advanced[open] summary::after { content: "–"; }
-    .advanced .box { padding: 0 14px 14px; border-top: 1px solid var(--line); }
-    .settings-row {
-      display: flex; justify-content: space-between; align-items: center; gap: 10px;
-      padding: 12px 0 4px;
-    }
-    .settings-note { font-size: 12px; color: var(--muted); }
-    .settings-actions { display: flex; align-items: center; gap: 7px; }
-    .btn-ghost {
-      display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
-      border: 1px solid var(--line); background: #fff; border-radius: 10px;
-      padding: 7px 11px; cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 650;
-    }
-    .btn-ghost:hover { color: var(--ink); border-color: #c7d6cf; }
-    .stack-field { display: block; margin-top: 12px; }
-
-    audio { display: none; }
-    .composer {
-      margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
-    }
-    .composer-row { display: flex; gap: 8px; align-items: flex-end; }
-    .composer textarea {
-      flex: 1; min-height: 46px; max-height: 120px; resize: vertical;
-      line-height: 1.45;
-    }
-    .composer .btn-send {
-      height: 46px; min-width: 46px; border-radius: 12px; border: 1px solid var(--line);
-      background: #fff; cursor: pointer; font-size: 14px; padding: 0 12px; font-weight: 650;
-    }
-    .composer .btn-send {
-      background: linear-gradient(160deg, #1cc79b, var(--green-dark));
-      color: #fff; border-color: transparent;
-    }
-    .composer .btn-send:disabled { opacity: .45; cursor: not-allowed; }
-    .composer .hint { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 16px; }
-    .transcript {
-      margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
-    }
-    .transcript-head {
-      display: flex; align-items: center; gap: 12px; margin-bottom: 8px;
-    }
-    .transcript-title { font-size: 13px; font-weight: 700; }
-    .transcript-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-    .transcript-list {
-      height: 210px; overflow-y: auto; overscroll-behavior: contain;
-      border: 1px solid var(--line); border-radius: 14px;
-      background: linear-gradient(180deg, #fbfcfb, #f5f8f6);
-      padding: 6px 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    .caption-empty { margin: 0; padding: 22px 4px; color: var(--muted); font-size: 13px; text-align: center; }
-    .caption-log-line {
-      padding: 8px 0; border-bottom: 1px solid #e7eeea; font-size: 12px; line-height: 1.55;
-      overflow-wrap: anywhere; white-space: pre-wrap;
-    }
-    .caption-log-line:last-child { border-bottom: 0; }
-    .caption-log-time { color: var(--muted); }
-    .caption-log-role { font-weight: 700; color: var(--muted); }
-    .caption-log-role.user { color: var(--green-dark); }
-    .caption-log-content { color: var(--ink); }
-    @media (max-width: 520px) {
-      .topbar { padding: 12px 14px; }
-      .brand-sub { display: none; }
-      .gh-link span { display: none; }
-      .stage { padding: 22px 16px 16px; border-radius: 24px; }
-      .status { font-size: 24px; }
-      .orb-wrap { width: 190px; height: 190px; }
-      .orb { width: 132px; height: 132px; }
-    }
-  </style>
   <style>
     /* Conversation workspace: voice console with light / dark themes. */
     :root,
@@ -340,8 +41,8 @@
       --app-ink: #f4f4f2;
       --app-muted: #9b9c9d;
       --app-dim: #696a6c;
-      --app-green: #10a37f;
-      --app-green-bright: #35c89f;
+      --app-green: #10b981;
+      --app-green-bright: #34d399;
       --app-red: #ef7777;
       --app-focus: 0 0 0 3px rgba(16, 163, 127, .32);
       --app-hover: rgba(255, 255, 255, .07);
@@ -398,8 +99,8 @@
       --app-ink: #111113;
       --app-muted: #6b6b73;
       --app-dim: #9b9ba3;
-      --app-green: #10a37f;
-      --app-green-bright: #0d8c6d;
+      --app-green: #10b981;
+      --app-green-bright: #059669;
       --app-red: #e11d48;
       --app-focus: 0 0 0 3px rgba(16, 163, 127, .20);
       --app-hover: rgba(17, 17, 19, .05);
@@ -445,8 +146,14 @@
       height: 100dvh;
       overflow: hidden;
       color: var(--app-ink);
-      background: var(--app-bg);
-      font-family: "Inter", "Noto Sans SC", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      background:
+        radial-gradient(900px 420px at 0% 0%, rgba(16, 185, 129, .07), transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, rgba(56, 189, 248, .05), transparent 50%),
+        var(--app-bg);
+      font-family: "DM Sans", "Noto Sans SC", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      letter-spacing: -.01em;
     }
     body.app-shell button:focus-visible,
     body.app-shell select:focus-visible,
@@ -495,10 +202,12 @@
       place-items: center;
       border-radius: 9px;
       color: #fff;
-      background: var(--app-green);
-      box-shadow: none;
-      font-size: 13px;
-      font-weight: 800;
+      background: linear-gradient(145deg, #34d399, #10b981 55%, #059669);
+      box-shadow: 0 6px 16px rgba(16, 185, 129, .28);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: -.02em;
     }
     body.app-shell .brand-text { min-width: 0; }
     body.app-shell .brand-title {
@@ -1145,41 +854,99 @@
       margin: 0;
       padding: 0;
       border: 1px solid var(--app-line-strong);
-      border-radius: 17px;
+      border-radius: 22px;
       background: var(--composer-bg);
       box-shadow: var(--composer-shadow);
       text-align: left;
+      transition: border-color .18s ease, box-shadow .18s ease;
     }
-    body.app-shell .composer-row { display: flex; align-items: flex-end; gap: 8px; padding: 8px; }
+    body.app-shell .composer:focus-within {
+      border-color: rgba(16, 185, 129, .42);
+      box-shadow: var(--composer-shadow), 0 0 0 3px rgba(16, 185, 129, .14);
+    }
+    body.app-shell .composer-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      padding: 6px 6px 6px 16px;
+    }
     body.app-shell .composer textarea {
-      min-height: 44px;
+      /* 单行时与 .btn-send 同高 40px；多行时由 JS 按 scrollHeight 向上扩展 */
+      height: 40px;
+      min-height: 40px;
       max-height: 140px;
       flex: 1;
       resize: none;
-      padding: 11px 4px;
+      overflow-y: hidden;
+      padding: 9px 0;
       border: 0;
       outline: 0;
       color: var(--app-ink);
       background: transparent;
-      font-size: 14px;
+      font-family: inherit;
+      font-size: 14.5px;
       line-height: 1.5;
+      letter-spacing: -.01em;
+      box-sizing: border-box;
     }
-    body.app-shell .composer textarea::placeholder { color: var(--placeholder); }
+    body.app-shell .composer textarea::placeholder {
+      color: var(--placeholder);
+    }
     body.app-shell .composer .btn-send {
-      width: 38px;
-      height: 38px;
-      min-width: 38px;
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      flex: 0 0 40px;
+      display: inline-grid;
+      place-items: center;
+      margin: 0;
       padding: 0;
-      border: 1px solid transparent;
-      border-radius: 10px;
-      color: var(--app-muted);
-      background: transparent;
+      border: 0;
+      border-radius: 50%;
+      color: #fff;
+      background: linear-gradient(160deg, #34d399, #10b981 48%, #059669);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, .28);
       cursor: pointer;
-      font-size: 16px;
+      transition:
+        transform .15s ease,
+        filter .15s ease,
+        box-shadow .15s ease,
+        background .15s ease,
+        opacity .15s ease;
     }
-    body.app-shell .composer .btn-send { color: #fff; background: var(--app-green); font-size: 13px; }
-    body.app-shell .composer .btn-send:hover { background: var(--app-green-bright); }
-    body.app-shell .composer .btn-send:disabled { opacity: .35; cursor: not-allowed; }
+    body.app-shell .composer .btn-send svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+      pointer-events: none;
+    }
+    body.app-shell .composer .btn-send:hover:not(:disabled) {
+      filter: brightness(1.06);
+      box-shadow: 0 6px 16px rgba(16, 185, 129, .36);
+    }
+    body.app-shell .composer .btn-send:active:not(:disabled) {
+      transform: scale(.94);
+    }
+    body.app-shell .composer .btn-send:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, .28), 0 4px 12px rgba(16, 185, 129, .28);
+    }
+    body.app-shell .composer .btn-send:disabled {
+      color: var(--app-dim);
+      background: var(--control-bg);
+      box-shadow: none;
+      cursor: not-allowed;
+      opacity: 1;
+      filter: none;
+    }
+    html[data-theme="light"] body.app-shell .composer .btn-send:disabled {
+      background: #eef0f3;
+      color: #a1a1aa;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.app-shell .composer,
+      body.app-shell .composer .btn-send { transition: none; }
+    }
     body.app-shell .composer .hint,
     body.app-shell .composer-dock > .hint {
       display: none;
@@ -1673,8 +1440,12 @@
         </div>
         <div class="composer">
           <div class="composer-row">
-            <textarea id="textInput" data-i18n-placeholder="composerPlaceholder" placeholder="通话中可发送文本…" disabled></textarea>
-            <button type="button" class="btn-send" id="btnSend" data-i18n-title="send" title="发送文本" disabled>↑</button>
+            <textarea id="textInput" data-i18n-placeholder="composerPlaceholder" placeholder="通话中可发送文本…" rows="1" disabled></textarea>
+            <button type="button" class="btn-send" id="btnSend" data-i18n-title="send" data-i18n-aria="send" title="发送文本" aria-label="发送文本" disabled>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
         </div>
         <div id="composerHint" class="hint" data-state="idle" data-i18n="composerHintIdle" role="status" aria-live="polite"></div>
@@ -1729,6 +1500,7 @@
             <div class="settings-actions">
               <a href="/accounts" class="btn-ghost" data-i18n="accountPool">账号池</a>
               <a href="/keys" class="btn-ghost" data-i18n="apiKeys">API 密钥</a>
+              <a href="/sessions" class="btn-ghost">会话记录</a>
               <button type="button" id="btnLogout" class="btn-ghost danger" data-i18n="logout">退出登录</button>
             </div>
           </div>
@@ -1827,6 +1599,8 @@
   var localSource = null, remoteSource = null;
   var localRaf = 0, remoteRaf = 0;
   var starting = false;
+  var stoppingCall = false;
+  var disconnectWatchTimer = 0;
   var inCall = false;
   var muted = false;
   var speakerMuted = false;
@@ -1834,6 +1608,13 @@
   var conversationId = '';
   var parentMessageId = '';
   var voiceSessionId = '';
+  var upstreamVoiceSessionId = '';
+  var stickyAccountId = 0; // pool account bound to this local conversation
+  var upstreamContextPersistTimer = 0;
+  var upstreamTitleFetchTimer = 0;
+  var upstreamTitleFetchInFlight = false;
+  var upstreamTitleAppliedFor = ''; // conversationId last applied from upstream
+  var upstreamTitleManualLock = false; // user renamed; do not overwrite until new chat
   var dcChannel = null; // WebRTC datachannel: oai-events
   var voiceStorageKey = 'chatgpt_web_voice_voice_v1';
   var languageStorageKey = 'chatgpt_web_voice_language_v1';
@@ -1989,6 +1770,7 @@
       composerHintSending: '提交中…',
       composerHintConnected: '已连接，可发送文本',
       composerHintWaiting: '已连接，等待会话就绪…',
+      composerHintChannel: '连接中，等待实时通道就绪…',
       transcriptAria: '当前会话内容',
       transcriptTitle: '字幕',
       transcriptMetaDefault: '',
@@ -2147,6 +1929,7 @@
       composerHintSending: 'Sending…',
       composerHintConnected: 'Connected — text ready',
       composerHintWaiting: 'Connected — waiting for session…',
+      composerHintChannel: 'Connecting — waiting for realtime channel…',
       transcriptAria: 'Current conversation',
       transcriptTitle: 'Captions',
       transcriptMetaDefault: '',
@@ -2635,8 +2418,141 @@
       preview: clampText(item.preview || (last && last.content) || '', 240),
       createdAt: timestampMillis(item.created_at || item.createdAt),
       updatedAt: timestampMillis(item.updated_at || item.updatedAt || item.created_at || item.createdAt),
+      // chatgpt.com continuity — used to resume the same upstream thread after reconnect.
+      accountId: Number(item.account_id || item.accountId || 0) || 0,
+      upstreamConversationId: String(item.upstream_conversation_id || item.upstreamConversationId || '').trim(),
+      upstreamParentMessageId: String(item.upstream_parent_message_id || item.upstreamParentMessageId || '').trim(),
+      upstreamVoiceSessionId: String(item.upstream_voice_session_id || item.upstreamVoiceSessionId || '').trim(),
+      gatewayVoiceSessionId: String(item.gateway_voice_session_id || item.gatewayVoiceSessionId || '').trim(),
       messages: messages
     };
+  }
+
+  function applyUpstreamContextFromSession(session) {
+    conversationId = (session && session.upstreamConversationId) || '';
+    parentMessageId = (session && session.upstreamParentMessageId) || '';
+    voiceSessionId = (session && session.gatewayVoiceSessionId) || '';
+    upstreamVoiceSessionId = (session && session.upstreamVoiceSessionId) || '';
+    stickyAccountId = (session && session.accountId) ? Number(session.accountId) || 0 : 0;
+  }
+
+  function schedulePersistUpstreamContext() {
+    if (!activeSessionId) return;
+    if (upstreamContextPersistTimer) clearTimeout(upstreamContextPersistTimer);
+    upstreamContextPersistTimer = setTimeout(function () {
+      upstreamContextPersistTimer = 0;
+      persistUpstreamContextNow().catch(function (error) {
+        log('persist upstream context fail', String(error && error.message || error));
+      });
+    }, 400);
+  }
+
+  async function persistUpstreamContextNow() {
+    if (!conversationReady || !activeSessionId) return;
+    var active = getActiveConversationSession();
+    if (active) {
+      active.accountId = stickyAccountId || 0;
+      active.upstreamConversationId = conversationId || '';
+      active.upstreamParentMessageId = parentMessageId || '';
+      active.upstreamVoiceSessionId = upstreamVoiceSessionId || '';
+      active.gatewayVoiceSessionId = voiceSessionId || '';
+    }
+    var body = {
+      account_id: stickyAccountId || 0,
+      upstream_conversation_id: conversationId || '',
+      upstream_parent_message_id: parentMessageId || '',
+      upstream_voice_session_id: upstreamVoiceSessionId || '',
+      gateway_voice_session_id: voiceSessionId || ''
+    };
+    await conversationRequest('/api/conversations/' + encodeURIComponent(activeSessionId), {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    });
+    if (voiceSessionId && (conversationId || parentMessageId || upstreamVoiceSessionId)) {
+      try {
+        await gatewayFetch('/api/voice/session/context', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            voice_session_id: voiceSessionId,
+            upstream_conversation_id: conversationId || '',
+            upstream_parent_message_id: parentMessageId || '',
+            upstream_voice_session_id: upstreamVoiceSessionId || ''
+          })
+        });
+      } catch (error) {
+        log('gateway context update fail', String(error && error.message || error));
+      }
+    }
+  }
+
+  function isPlaceholderLocalTitle(title) {
+    var value = String(title || '').trim().toLowerCase();
+    if (!value) return true;
+    return value === 'new chat' || value === 'new conversation' || value === 'untitled' ||
+      value === 'untitled conversation' || value === '新聊天' || value === '新对话' ||
+      value === '新会话' || value === '未命名会话' || value === '未命名对话' ||
+      value === String(t('sessionNew') || '').trim().toLowerCase() ||
+      value === String(t('sessionUntitled') || '').trim().toLowerCase();
+  }
+
+  function scheduleFetchUpstreamTitle(delayMs) {
+    if (!voiceSessionId || !conversationId) return;
+    if (upstreamTitleManualLock) return;
+    if (upstreamTitleAppliedFor && upstreamTitleAppliedFor === conversationId) return;
+    if (upstreamTitleFetchTimer) clearTimeout(upstreamTitleFetchTimer);
+    upstreamTitleFetchTimer = setTimeout(function () {
+      upstreamTitleFetchTimer = 0;
+      fetchAndApplyUpstreamTitle().catch(function (error) {
+        log('upstream title fetch fail', String(error && error.message || error));
+      });
+    }, typeof delayMs === 'number' ? delayMs : 2500);
+  }
+
+  async function fetchAndApplyUpstreamTitle() {
+    if (upstreamTitleFetchInFlight || upstreamTitleManualLock) return;
+    if (!voiceSessionId || !conversationId || !activeSessionId) return;
+    if (upstreamTitleAppliedFor === conversationId) return;
+    upstreamTitleFetchInFlight = true;
+    try {
+      var query = '/api/voice/session/title?voice_session_id=' + encodeURIComponent(voiceSessionId) +
+        '&upstream_conversation_id=' + encodeURIComponent(conversationId);
+      var response = await gatewayFetch(query, { method: 'GET' });
+      var data = {};
+      try { data = await response.json(); } catch (e) {}
+      if (!response.ok) {
+        log('upstream title http', response.status, data && data.detail);
+        // Title may not be ready yet; retry a couple of times while still in-call.
+        if (inCall && (response.status === 404 || response.status === 502 || response.status === 429)) {
+          scheduleFetchUpstreamTitle(8000);
+        }
+        return;
+      }
+      if (!data.has_title || !data.title) {
+        if (inCall) scheduleFetchUpstreamTitle(8000);
+        return;
+      }
+      await applyUpstreamTitleToActiveSession(String(data.title));
+      upstreamTitleAppliedFor = conversationId;
+    } finally {
+      upstreamTitleFetchInFlight = false;
+    }
+  }
+
+  async function applyUpstreamTitleToActiveSession(title) {
+    title = clampText(title, 120);
+    if (!title || !activeSessionId || upstreamTitleManualLock) return;
+    var active = getActiveConversationSession();
+    // Only auto-replace empty / placeholder / first-message auto titles once per upstream conversation.
+    if (active && active.title && !isPlaceholderLocalTitle(active.title) && upstreamTitleAppliedFor === conversationId) {
+      return;
+    }
+    try {
+      await renameConversationSession(activeSessionId, title);
+      log('upstream title applied', title);
+    } catch (error) {
+      log('apply upstream title fail', String(error && error.message || error));
+    }
   }
 
   async function conversationRequest(path, options) {
@@ -2705,6 +2621,12 @@
     activeSessionId = loaded.id;
     currentSessionHistory = loaded.messages.slice(-maxSessionMessages);
     lastAssistantHistoryAt = 0;
+    applyUpstreamContextFromSession(loaded);
+    // Switching sessions: allow auto-title again unless the stored title looks user-set.
+    upstreamTitleManualLock = !!(loaded.title && !isPlaceholderLocalTitle(loaded.title) && loaded.upstreamConversationId);
+    upstreamTitleAppliedFor = (loaded.title && !isPlaceholderLocalTitle(loaded.title) && loaded.upstreamConversationId)
+      ? loaded.upstreamConversationId
+      : '';
     syncTranscriptFromHistory();
     updateSessionHeader();
     renderSessionList();
@@ -2720,12 +2642,9 @@
       await migrateLegacyConversationSessions();
       await loadConversationListFromServer();
       if (!conversationSessions.length) {
-        var created = await conversationRequest('/api/conversations', {
-          method: 'POST',
-          body: JSON.stringify({ title: '' })
-        });
-        var initial = normalizeStoredSession(created.conversation || {});
-        if (!initial) throw new Error(t('conversationLoadFailed'));
+        // First visit: create an empty local conversation so the page always
+        // has a cv_* id from POST /api/conversations before any call/messages.
+        var initial = await createLocalConversationOnServer('');
         conversationSessions = [initial];
       }
       activeSessionId = conversationSessions[0].id;
@@ -3027,22 +2946,40 @@
     trimTranscriptBuffer();
   }
 
-  async function createConversationSession() {
-    await waitForConversationStore();
+  // Local conversation ids (cv_...) only come from POST /api/conversations.
+  // Never invent client-side ids; message/title persistence requires this row.
+  async function createLocalConversationOnServer(title) {
     var data = await conversationRequest('/api/conversations', {
       method: 'POST',
-      body: JSON.stringify({ title: '' })
+      body: JSON.stringify({ title: title || '' })
     });
     var session = normalizeStoredSession(data.conversation || {});
-    if (!session) throw new Error(t('conversationSaveFailed'));
+    if (!session || !session.id) throw new Error(t('conversationSaveFailed'));
+    return session;
+  }
+
+  async function createConversationSession() {
+    await waitForConversationStore();
+    // New local chat must not reuse the previous chatgpt.com conversation.
+    await releaseBackendVoiceSession(false);
+    conversationId = '';
+    parentMessageId = '';
+    upstreamVoiceSessionId = '';
+    stickyAccountId = 0;
+    upstreamTitleAppliedFor = '';
+    upstreamTitleManualLock = false;
+    if (upstreamTitleFetchTimer) { clearTimeout(upstreamTitleFetchTimer); upstreamTitleFetchTimer = 0; }
+    var session = await createLocalConversationOnServer('');
     conversationSessions.unshift(session);
     activeSessionId = session.id;
     currentSessionHistory = [];
     currentTranscript = [];
     lastAssistantHistoryAt = 0;
+    applyUpstreamContextFromSession(session);
     updateSessionHeader();
     renderSessionList();
     renderTranscript();
+    log('local conversation created', session.id);
     return session;
   }
 
@@ -3060,9 +2997,27 @@
     }
   }
 
-  // 继续当前本地会话：不新建、不清空历史。
+  // Before dialing: must have a local conversation id from create/list APIs.
+  // Reuse the active one when present; otherwise create via POST /api/conversations.
   async function prepareCallSession() {
     await waitForConversationStore();
+    var active = getActiveConversationSession();
+    if (!active || !activeSessionId) {
+      var session = await createLocalConversationOnServer('');
+      conversationSessions.unshift(session);
+      activeSessionId = session.id;
+      currentSessionHistory = [];
+      currentTranscript = [];
+      lastAssistantHistoryAt = 0;
+      applyUpstreamContextFromSession(session);
+      updateSessionHeader();
+      renderSessionList();
+      renderTranscript();
+      log('local conversation ensured for call', session.id);
+      return session;
+    }
+    applyUpstreamContextFromSession(active);
+    return active;
   }
 
   function loadCurrentSessionHistory() {
@@ -3348,21 +3303,44 @@
     updateComposerState();
   }
 
+  function isDataChannelReady() {
+    return !!(dcChannel && dcChannel.readyState === 'open');
+  }
+
+  // SDP may succeed before ICE/DataChannel finish. Treat the call as "live" for
+  // hangup, but only unlock the text composer when the realtime channel is open.
+  function isComposerReady() {
+    return !!inCall && isDataChannelReady() && !sending;
+  }
+
+  function markCallLive(uiState, titleKey, subKey) {
+    inCall = true;
+    beginAutoInterruptCalibration();
+    setUIKey(uiState || 'listening', titleKey || 'statusListening', subKey || 'subConnected');
+    updateCallControls();
+    updateComposerState();
+  }
+
   function updateCallControls() {
-    var connecting = !!starting && !inCall;
+    // Keep "connecting" while SDP is in flight OR after SDP until the DataChannel opens.
+    var connecting = (!!starting && !inCall) || (!!inCall && !isDataChannelReady());
     if (btnMain) {
       btnMain.classList.toggle('is-idle', !inCall && !connecting);
-      btnMain.classList.toggle('is-connecting', connecting);
-      btnMain.classList.toggle('is-live', !!inCall);
+      btnMain.classList.toggle('is-connecting', connecting && !inCall);
+      btnMain.classList.toggle('is-live', !!inCall && isDataChannelReady());
       btnMain.classList.toggle('stop', !!inCall);
-      if (connecting) {
+      if (connecting && !inCall) {
+        // Pre-SDP: cannot hang up yet (startCall still owns the flow).
         btnMain.textContent = t('statusConnecting');
         btnMain.setAttribute('title', t('statusConnecting'));
         btnMain.disabled = true;
       } else if (inCall) {
+        // After SDP: always allow hangup. Status text may still say "连接中"
+        // until the DataChannel opens; the composer stays locked separately.
         btnMain.textContent = t('end');
         btnMain.setAttribute('title', t('end'));
         btnMain.disabled = false;
+        btnMain.classList.toggle('stop', true);
       } else {
         btnMain.textContent = t('start');
         btnMain.setAttribute('title', t('start'));
@@ -3424,16 +3402,30 @@
     }
   }
 
+  // 输入框默认与发送按钮同高；内容换行时再向上增高，到上限后内部滚动。
+  function autoResizeComposer() {
+    if (!textInput) return;
+    var minH = 40;
+    var maxH = 140;
+    textInput.style.height = minH + 'px';
+    var next = Math.min(Math.max(textInput.scrollHeight, minH), maxH);
+    textInput.style.height = next + 'px';
+    textInput.style.overflowY = textInput.scrollHeight > maxH ? 'auto' : 'hidden';
+  }
+
   function updateComposerState() {
     // 官方语音会话中，正文通过 DataChannel relay_message 提交。
-    var ready = inCall && !sending;
+    // 输入框必须等 DC open，否则用户会看到“可输入”却发送失败。
+    var ready = isComposerReady();
     var wasDisabled = !!(textInput && textInput.disabled);
-    textInput.disabled = !inCall || sending;
+    textInput.disabled = !ready;
     btnSend.disabled = !ready;
     if (!inCall) {
       setComposerHint(t('composerHintIdle'), 'idle');
     } else if (sending) {
       setComposerHint(t('composerHintSending'), 'sending');
+    } else if (!isDataChannelReady()) {
+      setComposerHint(t('composerHintChannel'), 'channel');
     } else if (conversationId) {
       setComposerHint(t('composerHintConnected'), 'connected');
     } else {
@@ -3843,18 +3835,54 @@
 
     if (t === 'startup_telemetry' || (p && p.type === 'startup_telemetry')) {
       var st = (p && p.type === 'startup_telemetry') ? p : obj;
-      if (st.conversation_id) {
+      var stChanged = false;
+      if (st.conversation_id && st.conversation_id !== conversationId) {
         conversationId = st.conversation_id;
+        upstreamTitleAppliedFor = '';
+        stChanged = true;
         log('conversation_id', conversationId);
+      }
+      if (st.voice_session_id && String(st.voice_session_id) !== upstreamVoiceSessionId) {
+        upstreamVoiceSessionId = String(st.voice_session_id);
+        stChanged = true;
+      }
+      if (stChanged) {
+        schedulePersistUpstreamContext();
+        scheduleFetchUpstreamTitle(2000);
       }
       updateComposerState();
     }
     if (t === 'conversation_update' || (p && p.type === 'conversation_update')) {
       var cu = (p && p.type === 'conversation_update') ? p : obj;
-      if (cu.conversation_id) conversationId = cu.conversation_id;
-      if (cu.parent_message_id) parentMessageId = cu.parent_message_id;
+      var cuChanged = false;
+      if (cu.conversation_id && cu.conversation_id !== conversationId) {
+        conversationId = cu.conversation_id;
+        upstreamTitleAppliedFor = '';
+        cuChanged = true;
+      }
+      if (cu.parent_message_id && cu.parent_message_id !== parentMessageId) {
+        parentMessageId = cu.parent_message_id;
+        cuChanged = true;
+      }
       log('conversation_update', conversationId, parentMessageId);
+      if (cuChanged) {
+        schedulePersistUpstreamContext();
+        scheduleFetchUpstreamTitle(2000);
+      }
       updateComposerState();
+    }
+    // Optional: some web paths emit title_generation on text SSE; accept it on DC too if present.
+    if (t === 'title_generation' || (p && p.type === 'title_generation')) {
+      var tg = (p && p.type === 'title_generation') ? p : obj;
+      if (tg.conversation_id && tg.conversation_id !== conversationId) {
+        conversationId = tg.conversation_id;
+        schedulePersistUpstreamContext();
+      }
+      if (tg.title) {
+        applyUpstreamTitleToActiveSession(String(tg.title)).then(function () {
+          upstreamTitleAppliedFor = conversationId || upstreamTitleAppliedFor;
+        }).catch(function () {});
+      }
     }
     // 语音内旁路：user/assistant 的 chat_message_delta
     if (t === 'chat_message_delta' || (p && p.type === 'chat_message_delta')) {
@@ -3863,7 +3891,10 @@
       if (delta && delta.v && delta.v.message) {
         var msg = delta.v.message;
         var role = (msg.author && msg.author.role) || '';
-        if (msg.id && (role === 'assistant' || role === 'user')) parentMessageId = msg.id;
+        if (msg.id && (role === 'assistant' || role === 'user') && String(msg.id) !== parentMessageId) {
+          parentMessageId = msg.id;
+          schedulePersistUpstreamContext();
+        }
       }
       var priorCaptionRole = streamingCaptionRole;
       var priorCaptionMessageId = streamingCaptionMessageId;
@@ -3904,10 +3935,14 @@
     return response;
   }
 
-  async function releaseBackendVoiceSession() {
+  // Release gateway in-memory account binding. Durable SQLite metadata remains
+  // so the next dial can restore sticky account + upstream ids.
+  // keepLocal=true (hangup): keep voiceSessionId / sticky ids in the page.
+  // keepLocal=false (new chat): clear local gateway session id.
+  async function releaseBackendVoiceSession(keepLocal) {
     var sessionId = voiceSessionId;
     if (!sessionId) return;
-    voiceSessionId = '';
+    if (!keepLocal) voiceSessionId = '';
     try {
       await gatewayFetch('/api/voice/session/release', {
         method: 'POST',
@@ -3920,8 +3955,43 @@
     } catch (e) {}
   }
 
+  // Closing / refreshing the tab usually skips the hangup button path. Fire a
+  // best-effort release so admin call_sessions does not stay active forever.
+  // keepalive fetch may still lose the race on hard kills; startup orphan
+  // cleanup remains the final safety net.
+  function releaseOnPageExit() {
+    if (!(inCall || starting) || !voiceSessionId) return;
+    try {
+      if (navigator.sendBeacon) {
+        var payload = new Blob(
+          [JSON.stringify({ voice_session_id: voiceSessionId })],
+          { type: 'application/json' }
+        );
+        if (navigator.sendBeacon('/api/voice/session/release', payload)) return;
+      }
+    } catch (e) {}
+    try {
+      fetch('/api/voice/session/release', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ voice_session_id: voiceSessionId }),
+        keepalive: true
+      });
+    } catch (e) {}
+  }
+
   async function sendTextMessage() {
-    if (sending || !inCall) return;
+    if (sending) return;
+    if (!inCall) {
+      toast(t('composerHintIdle'));
+      return;
+    }
+    if (!isDataChannelReady()) {
+      toast(t('errDcNotReady'));
+      updateComposerState();
+      return;
+    }
     var text = (textInput.value || '').trim();
     if (!text) { toast(t('toastNeedContent')); return; }
     sending = true;
@@ -3935,6 +4005,7 @@
       sendRelayMessage(message);
       parentMessageId = message.id;
       textInput.value = '';
+      autoResizeComposer();
       rememberLocalMessage('user', text);
       showReply(t('replyTextSent'), false);
       toast(t('toastTextSent'));
@@ -4147,22 +4218,34 @@
       setUIKey('connecting', 'statusConnecting', 'subEstablishing');
 
       pc = newVoicePeerConnection();
+      // Capture this PC instance so late events after stopCall(pc=null) are ignored.
+      var connection = pc;
 
       try {
-        var dc = createVoiceDataChannel(pc);
+        var dc = createVoiceDataChannel(connection);
         dcChannel = dc;
         dc.onopen = function () {
+          if (pc !== connection) return;
           log('dc open');
-          updateComposerState();
+          // Prefer DC open as the moment the call becomes fully usable for text.
+          if (inCall || connection.remoteDescription) {
+            markCallLive('listening', 'statusListening', 'subConnected');
+          } else {
+            updateComposerState();
+            updateCallControls();
+          }
           setTimeout(onVoiceChannelReady, 700);
         };
         dc.onclose = function () {
           log('dc close');
           if (dcChannel === dc) dcChannel = null;
+          if (pc !== connection) return;
           updateComposerState();
+          updateCallControls();
         };
         dc.onerror = function (e) { log('dc error', e); };
         dc.onmessage = function (ev) {
+          if (pc !== connection) return;
           try {
             var obj = JSON.parse(ev.data);
             var inner = obj;
@@ -4191,9 +4274,10 @@
         };
       } catch (e) { log('dc fail', String(e)); }
 
-      localStream.getTracks().forEach(function (t) { pc.addTrack(t, localStream); });
+      localStream.getTracks().forEach(function (t) { connection.addTrack(t, localStream); });
 
-      pc.ontrack = function (ev) {
+      connection.ontrack = function (ev) {
+        if (pc !== connection) return;
         log('ontrack', ev.track.kind, 'muted=', ev.track.muted);
         if (ev.streams && ev.streams[0]) remoteStream = ev.streams[0];
         else {
@@ -4204,33 +4288,56 @@
         ensureRemotePlay();
         startMeter(remoteStream, 'remote');
       };
-      pc.oniceconnectionstatechange = function () {
-        log('ice', pc.iceConnectionState);
-        if (pc.iceConnectionState === 'failed') {
-          setUIKey('error', 'statusConnFail', 'subNetProxy');
-          toast(t('toastConnFail'));
+      connection.oniceconnectionstatechange = function () {
+        if (pc !== connection) return;
+        log('ice', connection.iceConnectionState);
+        if (connection.iceConnectionState === 'failed') {
+          // ICE failure is terminal: tear down fully so controls leave the live/connecting state.
+          endCallFromTransport('failed');
+        } else if (connection.iceConnectionState === 'connected' || connection.iceConnectionState === 'completed') {
+          clearDisconnectWatch();
         }
       };
-      pc.onconnectionstatechange = function () {
-        log('conn', pc.connectionState);
-        if (pc.connectionState === 'connected') {
+      connection.onconnectionstatechange = function () {
+        if (pc !== connection) return;
+        log('conn', connection.connectionState);
+        if (connection.connectionState === 'connected') {
+          clearDisconnectWatch();
+          // Media path is up; unlock hangup, but text still waits for DC open.
           inCall = true;
           beginAutoInterruptCalibration();
-          setUIKey('listening', 'statusListening', 'subConnected');
+          if (isDataChannelReady()) {
+            markCallLive('listening', 'statusListening', 'subConnected');
+          } else {
+            setUIKey('connecting', 'statusConnecting', 'subEntering');
+            updateCallControls();
+            updateComposerState();
+          }
           setTimeout(onVoiceChannelReady, 700);
+          return;
         }
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          if (inCall) setUIKey('error', 'statusDisconnected', 'subCallEnded');
+        if (connection.connectionState === 'failed') {
+          endCallFromTransport('failed');
+          return;
+        }
+        if (connection.connectionState === 'disconnected') {
+          // Brief ICE blips can report disconnected; only end the call if it stays down.
+          scheduleDisconnectWatch();
+          return;
+        }
+        if (connection.connectionState === 'closed') {
+          // Intentional pc.close() also lands here; stopCall owns the final UI.
+          if (inCall && !stoppingCall) endCallFromTransport('closed');
         }
       };
 
-      var offer = await pc.createOffer(voiceOfferOptions());
-      await pc.setLocalDescription(offer);
+      var offer = await connection.createOffer(voiceOfferOptions());
+      await connection.setLocalDescription(offer);
       await new Promise(function (resolve) {
-        if (pc.iceGatheringState === 'complete') return resolve();
+        if (connection.iceGatheringState === 'complete') return resolve();
         var t = setTimeout(resolve, 2500);
-        pc.onicegatheringstatechange = function () {
-          if (pc.iceGatheringState === 'complete') { clearTimeout(t); resolve(); }
+        connection.onicegatheringstatechange = function () {
+          if (connection.iceGatheringState === 'complete') { clearTimeout(t); resolve(); }
         };
       });
 
@@ -4244,23 +4351,55 @@
           voice: normalizeVoice(voiceEl.value),
           voice_mode: (document.getElementById('voiceMode').value || gatewayVoiceDefaults.voice_mode).trim(),
           language_code: normalizeLanguage(languageEl && languageEl.value),
-          voice_session_id: voiceSessionId
+          voice_session_id: voiceSessionId || '',
+          account_id: stickyAccountId || 0,
+          upstream_conversation_id: conversationId || '',
+          upstream_parent_message_id: parentMessageId || '',
+          upstream_voice_session_id: upstreamVoiceSessionId || ''
         })
       });
       var data = {};
       try { data = await resp.json(); } catch (e) {}
       if (!resp.ok) {
         var msg = (data && data.detail && (data.detail.error || JSON.stringify(data.detail))) || ('HTTP ' + resp.status);
+        // Stale gateway binding / expired resume ids: drop sticky fields and let the user retry.
+        if (resp.status === 404 || resp.status === 403) {
+          voiceSessionId = '';
+          schedulePersistUpstreamContext();
+        }
+        // Bound account gone or disabled: clear sticky account so user can start a new thread.
+        if (resp.status === 401 || resp.status === 503) {
+          if (stickyAccountId > 0 && (String(msg).indexOf('preferred account') >= 0 || String(msg).indexOf('bound account') >= 0 || String(msg).indexOf('unavailable') >= 0)) {
+            stickyAccountId = 0;
+            voiceSessionId = '';
+            conversationId = '';
+            parentMessageId = '';
+            upstreamVoiceSessionId = '';
+            schedulePersistUpstreamContext();
+          }
+        }
         setUI('error', t('statusStartFail'), msg, 'statusStartFail', '', null, null);
         toast(msg);
         await stopCall(false);
         return;
       }
-      voiceSessionId = data.voice_session_id || data.session_id || '';
-      log('session ok', voiceSessionId);
+      voiceSessionId = data.voice_session_id || data.session_id || voiceSessionId || '';
+      if (data.account_id) stickyAccountId = Number(data.account_id) || stickyAccountId || 0;
+      if (data.upstream_voice_session_id) upstreamVoiceSessionId = data.upstream_voice_session_id;
+      if (data.upstream_conversation_id) conversationId = data.upstream_conversation_id;
+      if (data.upstream_parent_message_id) parentMessageId = data.upstream_parent_message_id;
+      log('session ok', voiceSessionId, 'account', stickyAccountId, 'resume', !!conversationId);
+      schedulePersistUpstreamContext();
       await pc.setRemoteDescription({ type: 'answer', sdp: data.answer_sdp });
+      // SDP exchanged: allow hangup, keep status "连接中" until DataChannel opens.
       inCall = true;
-      setUIKey('connecting', 'statusConnecting', 'subEntering');
+      if (isDataChannelReady()) {
+        markCallLive('listening', 'statusListening', 'subConnected');
+      } else {
+        setUIKey('connecting', 'statusConnecting', 'subEntering');
+        updateCallControls();
+        updateComposerState();
+      }
       await ensureRemotePlay();
       setTimeout(onVoiceChannelReady, 700);
     } catch (e) {
@@ -4270,53 +4409,102 @@
       await stopCall(false);
     } finally {
       starting = false;
+      updateCallControls();
+      updateComposerState();
     }
+  }
+
+  function clearDisconnectWatch() {
+    if (disconnectWatchTimer) {
+      clearTimeout(disconnectWatchTimer);
+      disconnectWatchTimer = 0;
+    }
+  }
+
+  function scheduleDisconnectWatch() {
+    if (!inCall || stoppingCall || starting) return;
+    if (disconnectWatchTimer) return;
+    // Give ICE a short window to recover before treating the call as ended.
+    disconnectWatchTimer = setTimeout(function () {
+      disconnectWatchTimer = 0;
+      var state = pc && pc.connectionState;
+      var ice = pc && pc.iceConnectionState;
+      if (!inCall || stoppingCall) return;
+      if (state === 'connected' || ice === 'connected' || ice === 'completed') return;
+      endCallFromTransport(state === 'failed' ? 'failed' : 'disconnected');
+    }, 1800);
+  }
+
+  // Transport-level hangup: release mic/PC/DC and force controls out of live/connecting.
+  function endCallFromTransport(reason) {
+    if (stoppingCall || (!inCall && !pc && !localStream && !dcChannel)) return;
+    clearDisconnectWatch();
+    var failed = reason === 'failed';
+    stopCall(false).then(function () {
+      if (failed) {
+        setUIKey('error', 'statusConnFail', 'subNetProxy');
+        toast(t('toastConnFail'));
+      } else {
+        setUIKey('error', 'statusDisconnected', 'subCallEnded');
+      }
+    }).catch(function () {
+      setUIKey('error', failed ? 'statusConnFail' : 'statusDisconnected', failed ? 'subNetProxy' : 'subCallEnded');
+    });
   }
 
   async function stopCall(updateText) {
     if (updateText === undefined) updateText = true;
-    clearInterval(0);
-    if (localRaf) cancelAnimationFrame(localRaf);
-    if (remoteRaf) cancelAnimationFrame(remoteRaf);
-    localRaf = 0; remoteRaf = 0;
-    try { if (dcChannel) dcChannel.close(); } catch (e) {}
-    dcChannel = null;
-    await stopVoicePreviewOnly();
-    if (pc) { try { pc.close(); } catch (e) {} pc = null; }
-    if (localStream) {
-      localStream.getTracks().forEach(function (t) { t.stop(); });
-      localStream = null;
+    if (stoppingCall) return;
+    stoppingCall = true;
+    clearDisconnectWatch();
+    try {
+      clearInterval(0);
+      if (localRaf) cancelAnimationFrame(localRaf);
+      if (remoteRaf) cancelAnimationFrame(remoteRaf);
+      localRaf = 0; remoteRaf = 0;
+      try { if (dcChannel) dcChannel.close(); } catch (e) {}
+      dcChannel = null;
+      await stopVoicePreviewOnly();
+      if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+      if (localStream) {
+        localStream.getTracks().forEach(function (t) { t.stop(); });
+        localStream = null;
+      }
+      remoteStream = null;
+      remoteAudio.srcObject = null;
+      setWaveLevel('local', 0);
+      setWaveLevel('remote', 0);
+      inCall = false;
+      muted = false;
+      speakerMuted = false;
+      sending = false;
+      remoteSpeakingUntil = 0;
+      assistantSpeaking = false;
+      autoInterruptStartedAt = 0;
+      autoInterruptCooldownUntil = 0;
+      currentAutoInterruptRms = AUTO_INTERRUPT_RMS;
+      currentAutoInterruptHoldMs = AUTO_INTERRUPT_HOLD_MS;
+      autoInterruptCalibrationEndsAt = 0;
+      autoInterruptCalibrationSamples = [];
+      autoInterruptAmbientRms = 0;
+      awaitingInterruptAck = false;
+      playbackSuppressed = false;
+      streamingCaptionRole = '';
+      streamingCaptionText = '';
+      streamingCaptionMessageId = '';
+      if (remoteAudio) remoteAudio.muted = false;
+      // Persist sticky ids, then free the gateway memory binding. Resume uses
+      // SQLite call_sessions / local conversation rows on the next dial.
+      // "New chat" still clears local ids via createConversationSession().
+      try { await persistUpstreamContextNow(); } catch (e) {}
+      try { await releaseBackendVoiceSession(true); } catch (e) {}
+      updateCallControls();
+      if (updateText) setUIKey('idle', 'statusReady', 'subReady');
+      updateTranscriptMeta();
+      updateComposerState();
+    } finally {
+      stoppingCall = false;
     }
-    remoteStream = null;
-    remoteAudio.srcObject = null;
-    setWaveLevel('local', 0);
-    setWaveLevel('remote', 0);
-    inCall = false;
-    muted = false;
-    speakerMuted = false;
-    sending = false;
-    remoteSpeakingUntil = 0;
-    assistantSpeaking = false;
-    autoInterruptStartedAt = 0;
-    autoInterruptCooldownUntil = 0;
-    currentAutoInterruptRms = AUTO_INTERRUPT_RMS;
-    currentAutoInterruptHoldMs = AUTO_INTERRUPT_HOLD_MS;
-    autoInterruptCalibrationEndsAt = 0;
-    autoInterruptCalibrationSamples = [];
-    autoInterruptAmbientRms = 0;
-    awaitingInterruptAck = false;
-    playbackSuppressed = false;
-    conversationId = '';
-    parentMessageId = '';
-    streamingCaptionRole = '';
-    streamingCaptionText = '';
-    streamingCaptionMessageId = '';
-    if (remoteAudio) remoteAudio.muted = false;
-    await releaseBackendVoiceSession();
-    updateCallControls();
-    if (updateText) setUIKey('idle', 'statusReady', 'subReady');
-    updateTranscriptMeta();
-    updateComposerState();
   }
 
   function toggleMute() {
@@ -4447,6 +4635,10 @@
       if (submit) submit.disabled = true;
       try {
         await renameConversationSession(id, title);
+        if (id === activeSessionId) {
+          upstreamTitleManualLock = true;
+          upstreamTitleAppliedFor = conversationId || upstreamTitleAppliedFor;
+        }
         renameConversationDialog.close();
         toast(t('sessionRenamed'));
       } catch (error) {
@@ -4519,15 +4711,20 @@
       toast(inCall ? t('toastSensitivityInCall') : t('toastSensitivity'));
     };
     btnSend.onclick = sendTextMessage;
+    textInput.addEventListener('input', autoResizeComposer);
     textInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendTextMessage();
       }
     });
+    window.addEventListener('resize', autoResizeComposer);
+    autoResizeComposer();
     initWaveBars();
     renderTranscript();
     updateTranscriptMeta();
+    window.addEventListener('pagehide', releaseOnPageExit);
+    window.addEventListener('beforeunload', releaseOnPageExit);
     btnLogout.onclick = async function () {
       try {
         await stopCall(false);
