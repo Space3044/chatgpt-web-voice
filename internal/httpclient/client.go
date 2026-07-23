@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"crypto/tls"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -26,11 +27,15 @@ func FromConfig(cfg config.Config) Options {
 	}
 }
 
-// New builds an HTTP client with an optional account-specific proxy. Local
-// development may explicitly disable upstream TLS verification; production
-// always verifies certificates. An empty proxy always means a direct
-// connection; process-wide proxy environment variables are intentionally
-// ignored.
+// New builds an HTTP client for upstream ChatGPT traffic.
+//
+// Proxy selection:
+//  1. non-empty account proxy wins (per-account override)
+//  2. otherwise use process proxy environment variables
+//     (HTTP_PROXY / HTTPS_PROXY and NO_PROXY, including lowercase variants)
+//
+// Local development may explicitly disable upstream TLS verification;
+// production always verifies certificates.
 // Note: Go cannot fully replicate curl_cffi Chrome TLS impersonation;
 // headers still match the browser client used by ChatGPT web.
 func New(opts Options, accountProxy string) *http.Client {
@@ -41,6 +46,7 @@ func New(opts Options, accountProxy string) *http.Client {
 	}
 
 	transport := &http.Transport{
+		Proxy: proxyFunc(proxyURL),
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -55,15 +61,35 @@ func New(opts Options, accountProxy string) *http.Client {
 		},
 	}
 
-	if proxyURL != "" {
-		u, err := url.Parse(proxyURL)
-		if err == nil {
-			transport.Proxy = http.ProxyURL(u)
-		}
-	}
-
 	return &http.Client{
 		Timeout:   120 * time.Second,
 		Transport: transport,
+	}
+}
+
+// proxyFunc returns the transport Proxy callback. Account proxy overrides
+// environment proxies; empty account proxy falls back to ProxyFromEnvironment.
+func proxyFunc(accountProxy string) func(*http.Request) (*url.URL, error) {
+	if accountProxy == "" {
+		return http.ProxyFromEnvironment
+	}
+	u, err := url.Parse(accountProxy)
+	if err != nil || u.Hostname() == "" || !supportedProxyScheme(u.Scheme) {
+		// Do not include the raw URL because it may contain proxy credentials.
+		return func(*http.Request) (*url.URL, error) {
+			return nil, errInvalidAccountProxy
+		}
+	}
+	return http.ProxyURL(u)
+}
+
+var errInvalidAccountProxy = errors.New("invalid account proxy URL")
+
+func supportedProxyScheme(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "http", "https", "socks5", "socks5h":
+		return true
+	default:
+		return false
 	}
 }

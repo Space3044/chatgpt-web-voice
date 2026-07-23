@@ -293,8 +293,10 @@ Selection prefers the least recently used enabled account. An upstream **401** f
 Proxy selection for upstream ChatGPT requests:
 
 1. If the selected account has a proxy in SQLite, that proxy is used.
-2. Otherwise the process proxy environment is used (`HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`, plus `NO_PROXY`).
+2. Otherwise Go follows the process proxy environment (`HTTP_PROXY` / `HTTPS_PROXY` and `NO_PROXY`; lowercase variants are also recognized).
 3. If neither is set, the request goes direct.
+
+There is no gateway-wide `VOICE_*` proxy setting. These are standard process environment variables, and the account proxy always takes precedence. Docker Compose passes through the host shell's standard proxy variables when present. Windows system proxy/PAC settings are not automatically visible inside WSL or a container unless they are exported into that process environment.
 
 The `/accounts` panel supports create, edit, enable/disable, search, delete, JWT expiry display, and manual probe. Empty secret fields keep existing values on edit; refresh token and proxy have explicit clear actions.
 
@@ -326,7 +328,7 @@ internal/auth/           browser session + Basic Auth
 internal/config/         environment config
 internal/accounts/       SQLite accounts and conversations
 internal/logging/        slog setup and HTTP middleware
-internal/httpclient/     upstream HTTP client (account proxy / skip-verify)
+internal/httpclient/     upstream HTTP client (account proxy / process proxy environment / skip-verify)
 internal/tokenutil/      JWT expiry helpers
 internal/voice/          /realtime/wm gateway and account probe
 internal/api/            protected HTTP handlers

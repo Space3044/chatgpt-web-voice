@@ -156,10 +156,10 @@ func TestClassifyProbeBody(t *testing.T) {
 	}
 }
 
-func TestProbeNetworkDetailSuggestsProxyOnDirectTimeout(t *testing.T) {
+func TestProbeNetworkDetailSuggestsProcessProxyOnTimeout(t *testing.T) {
 	err := fmt.Errorf(`Get "https://chatgpt.com/backend-api/settings/user": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)
 	got := probeNetworkDetail(err, "")
-	if !strings.Contains(got, "direct connection") || !strings.Contains(got, "proxy") {
+	if !strings.Contains(got, "HTTP_PROXY") || !strings.Contains(got, "NO_PROXY") {
 		t.Fatalf("unexpected detail: %q", got)
 	}
 	got = probeNetworkDetail(err, "http://127.0.0.1:7890")

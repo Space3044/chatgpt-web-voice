@@ -14,6 +14,14 @@ services:
       VOICE_AUTH_USERNAME: ${VOICE_AUTH_USERNAME:?VOICE_AUTH_USERNAME is required}
       VOICE_AUTH_PASSWORD: ${VOICE_AUTH_PASSWORD:?VOICE_AUTH_PASSWORD is required}
       VOICE_LOG_LEVEL: ${VOICE_LOG_LEVEL:-info}
+      # Standard process proxy passthrough, not gateway-specific settings.
+      # The selected account's proxy still takes precedence when configured.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      no_proxy: ${no_proxy:-}
     volumes:
       # SQLite database and optional legacy accounts.json migration input
       # persist on the host.
@@ -30,7 +38,7 @@ services:
         - CMD-SHELL
         - >-
           AUTH="$$(printf '%s:%s' "$${VOICE_AUTH_USERNAME}" "$${VOICE_AUTH_PASSWORD}" | base64 | tr -d '\n')";
-          wget -q -T 3 --header="Authorization: Basic $${AUTH}" -O /dev/null "http://127.0.0.1:8090/api/voice/health"
+          wget -q -Y off -T 3 --header="Authorization: Basic $${AUTH}" -O /dev/null "http://127.0.0.1:8090/api/voice/health"
       interval: 30s
       timeout: 5s
       retries: 3

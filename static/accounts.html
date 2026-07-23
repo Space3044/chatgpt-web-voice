@@ -723,7 +723,7 @@
           probeAlive: '存活 · HTTP {code}',
           probeUnauthorized: '失效 · 已禁用 · HTTP {code}',
           probeUnknown: '未知 · HTTP {code} · {detail}',
-          probeTimeoutDirect: '上游超时（直连）。当前网络访问不了 chatgpt.com，请给该账号配置 proxy 后再探测。',
+          probeTimeoutEnvironment: '上游超时。请检查当前进程的 HTTP_PROXY/HTTPS_PROXY/NO_PROXY，或给该账号单独配置 proxy。',
           probeTimeoutProxy: '上游超时（经账号 proxy）。请检查 proxy 是否可达。',
           probeNetwork: '探测失败：{detail}',
           tokenExpired: '已过期',
@@ -739,7 +739,7 @@
           deviceIdLabel: 'Device ID',
           proxyLabel: 'Proxy',
           deviceLabel: '设备',
-          proxyDirect: '直连',
+          proxyDirect: '自动（环境代理/直连）',
           noDevice: '未设置设备',
           accountId: 'ID {id}',
 
@@ -770,9 +770,9 @@
           refreshHint: '可选',
           refreshConfigured: '可选。已配置，留空保持不变',
           refreshEmpty: '可选',
-          proxyHint: '可选，例如 http://user:pass@host:port',
+          proxyHint: '可选，例如 http://user:pass@host:port；留空则按进程环境代理规则访问',
           proxyConfigured: '可选。当前：{preview}，留空保持不变',
-          proxyEmpty: '可选，例如 http://user:pass@host:port',
+          proxyEmpty: '可选；留空则自动使用 HTTP_PROXY/HTTPS_PROXY/NO_PROXY，未配置时直连',
           saved: '账户已保存',
           deleted: '账户已删除',
           enabledToast: '账户已启用',
@@ -786,7 +786,7 @@
           delete: '删除',
           refreshTokenYes: '已配置 refresh',
           refreshTokenNo: '无 refresh',
-          proxyNone: '直连',
+          proxyNone: '自动（环境代理/直连）',
           never: '从未使用',
           availableBadge: '可用',
           disabledBadge: '禁用',
@@ -822,7 +822,7 @@
           probeAlive: 'Alive · HTTP {code}',
           probeUnauthorized: 'Invalid · disabled · HTTP {code}',
           probeUnknown: 'Unknown · HTTP {code} · {detail}',
-          probeTimeoutDirect: 'Upstream timed out on a direct connection. chatgpt.com is unreachable here — set this account proxy and retry.',
+          probeTimeoutEnvironment: 'Upstream timed out. Check this process\'s HTTP_PROXY/HTTPS_PROXY/NO_PROXY, or set a per-account proxy and retry.',
           probeTimeoutProxy: 'Upstream timed out via the account proxy. Check that the proxy is reachable.',
           probeNetwork: 'Probe failed: {detail}',
           tokenExpired: 'Expired',
@@ -838,7 +838,7 @@
           deviceIdLabel: 'Device ID',
           proxyLabel: 'Proxy',
           deviceLabel: 'Device',
-          proxyDirect: 'Direct',
+          proxyDirect: 'Auto (env proxy/direct)',
           noDevice: 'No device',
           accountId: 'ID {id}',
 
@@ -869,9 +869,9 @@
           refreshHint: 'Optional',
           refreshConfigured: 'Optional. Configured — leave blank to keep',
           refreshEmpty: 'Optional',
-          proxyHint: 'Optional, e.g. http://user:pass@host:port',
+          proxyHint: 'Optional, e.g. http://user:pass@host:port. Leave blank to follow the process proxy environment.',
           proxyConfigured: 'Optional. Current: {preview} — leave blank to keep',
-          proxyEmpty: 'Optional, e.g. http://user:pass@host:port',
+          proxyEmpty: 'Optional. Leave blank to use HTTP_PROXY/HTTPS_PROXY/NO_PROXY, or direct when unset.',
           saved: 'Account saved',
           deleted: 'Account deleted',
           enabledToast: 'Account enabled',
@@ -885,7 +885,7 @@
           delete: 'Delete',
           refreshTokenYes: 'Refresh set',
           refreshTokenNo: 'No refresh',
-          proxyNone: 'Direct',
+          proxyNone: 'Auto (env proxy/direct)',
           never: 'Never',
           availableBadge: 'Available',
           disabledBadge: 'Disabled',
@@ -1356,12 +1356,10 @@
         }
         var lower = detail.toLowerCase();
         if (lower.indexOf('timeout') >= 0 || lower.indexOf('deadline exceeded') >= 0) {
-          if (lower.indexOf('direct connection') >= 0 || lower.indexOf('set this account') >= 0) {
-            return { message: t('probeTimeoutDirect'), sticky: true };
-          }
           if (lower.indexOf('account proxy') >= 0 || lower.indexOf('via account proxy') >= 0) {
             return { message: t('probeTimeoutProxy'), sticky: true };
           }
+          return { message: t('probeTimeoutEnvironment'), sticky: true };
         }
         return {
           message: t('probeUnknown', { code: code || '—', detail: detail || probe.status || 'unknown' }),

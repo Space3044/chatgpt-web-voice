@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Restored process proxy environment fallback for upstream ChatGPT traffic: account proxy still wins when set; otherwise `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` (and `NO_PROXY`) are honored like curl.
+- Restored process proxy environment fallback for upstream ChatGPT traffic: account proxy still wins when set; otherwise Go honors `HTTP_PROXY` / `HTTPS_PROXY` and `NO_PROXY` (including lowercase variants).
 - Restructured internal packages into clearer layers: shared SQLite `store`, domain repositories (`accounts`, `conversations`), application services (`voice`), HTTP adapters (`api`), and composition root (`app`); `cmd/server` is now a thin entrypoint.
 - Replaced shared Bearer gateway key with environment-injected username/password login, HttpOnly browser sessions, and Basic Auth for automation.
 - Protected pages, static resources, and voice APIs behind the authentication middleware.

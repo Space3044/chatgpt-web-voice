@@ -24,11 +24,11 @@ const (
 	wmURL           = "https://chatgpt.com/realtime/wm?dcid=0"
 	settingsUserURL = "https://chatgpt.com/backend-api/settings/user"
 	// Probe is a quick liveness check. Keep it short so the accounts panel
-	// does not sit on "checking…" while a blocked direct path dials chatgpt.com.
-	probeTimeout       = 12 * time.Second
-	probeDialTimeout   = 8 * time.Second
-	probeTLSTimeout    = 8 * time.Second
-	probeBodyLimit     = 64 << 10
+	// does not sit on "checking…" while an unreachable upstream path dials chatgpt.com.
+	probeTimeout     = 12 * time.Second
+	probeDialTimeout = 8 * time.Second
+	probeTLSTimeout  = 8 * time.Second
+	probeBodyLimit   = 64 << 10
 )
 
 var allowedRealtimeVoices = map[string]struct{}{
@@ -406,10 +406,10 @@ func probeNetworkDetail(err error, accountProxy string) string {
 		strings.Contains(lower, "deadline exceeded") ||
 		strings.Contains(lower, "i/o timeout")
 	if timedOut {
-		if strings.TrimSpace(accountProxy) == "" {
-			return "upstream timeout on direct connection; set this account's proxy if chatgpt.com is blocked"
+		if strings.TrimSpace(accountProxy) != "" {
+			return "upstream timeout via account proxy; check proxy reachability"
 		}
-		return "upstream timeout via account proxy; check proxy reachability"
+		return "upstream timeout; check HTTP_PROXY/HTTPS_PROXY/NO_PROXY or set this account's proxy if chatgpt.com is blocked"
 	}
 	return truncate(msg, 300)
 }
@@ -525,9 +525,9 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 		if explicitProxy == "" && bound != nil {
 			explicitProxy = bound.Proxy
 		}
-		proxySource := "direct"
-		if explicitProxy != "" {
-			proxySource = "proxy"
+		proxySource := "process_environment_or_direct"
+		if strings.TrimSpace(explicitProxy) != "" {
+			proxySource = "account"
 		}
 
 		status, _, text, err := s.postWMOnce(token, offerSDP, sessionJSON, device, explicitProxy)
