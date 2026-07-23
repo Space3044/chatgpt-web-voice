@@ -80,7 +80,7 @@ func TestNormalizeSDP(t *testing.T) {
 
 func TestVoiceSessionOwnership(t *testing.T) {
 	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
-	account := accounts.Account{ID: 7, DeviceID: "device", Proxy: "http://proxy.example:8080"}
+	account := accounts.Account{ID: 7, Proxy: "http://proxy.example:8080"}
 	id := svc.bindVoiceSession("api_key:1", "", "token", account, UpstreamContext{})
 	if id == "" {
 		t.Fatal("missing voice session ID")
@@ -153,7 +153,7 @@ func TestFetchUpstreamTitleUsesBoundAccount(t *testing.T) {
 
 	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
 	svc.conversationURLPrefix = upstream.URL + "/backend-api/conversation/"
-	account := accounts.Account{ID: 9, DeviceID: "device-title"}
+	account := accounts.Account{ID: 9}
 	id := svc.bindVoiceSession("api_key:1", "", "token-secret", account, UpstreamContext{
 		ConversationID: "conv-title-1",
 	})
@@ -198,7 +198,7 @@ func TestFetchUpstreamTitleEmptyWhenNotGenerated(t *testing.T) {
 
 func TestUpdateSessionContextMergesUpstreamIDs(t *testing.T) {
 	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
-	account := accounts.Account{ID: 3, DeviceID: "device"}
+	account := accounts.Account{ID: 3}
 	id := svc.bindVoiceSession("api_key:1", "", "token", account, UpstreamContext{
 		UpstreamVoiceSessionID: "UPSTREAM-1",
 	})
@@ -251,7 +251,7 @@ func TestProbeAccountTokenAlive(t *testing.T) {
 
 	pool := testPool(t)
 	token := testJWT(map[string]any{"exp": time.Now().Add(2 * time.Hour).Unix()})
-	account, err := pool.Create(accounts.Account{AccessToken: token, Status: "正常", DeviceID: "device-1"})
+	account, err := pool.Create(accounts.Account{AccessToken: token, Status: "正常"})
 	if err != nil {
 		t.Fatal(err)
 	}

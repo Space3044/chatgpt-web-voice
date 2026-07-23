@@ -1,9 +1,25 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateRequiresUsernameAndPassword(t *testing.T) {
-	cfg := Config{Environment: EnvironmentDevelopment, DatabaseFile: "voice.db", AuthSessionTTL: 60, LoginMaxFailures: 8, LoginWindowSeconds: 900, LoginLockoutSeconds: 900, LogFormat: "json", LogLevel: "info"}
+	cfg := Config{
+		Environment:         EnvironmentDevelopment,
+		DatabaseFile:        "voice.db",
+		AuthSessionTTL:      60,
+		LoginMaxFailures:    8,
+		LoginWindowSeconds:  900,
+		LoginLockoutSeconds: 900,
+		UpstreamTransport:   TransportTLSClient,
+		TLSProfile:          DefaultTLSProfile,
+		DeviceID:            "device-test",
+		SessionID:           "session-test",
+		LogFormat:           "json",
+		LogLevel:            "info",
+	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected missing username to fail validation")
 	}
@@ -83,11 +99,68 @@ func TestValidateRejectsUnknownEnvironment(t *testing.T) {
 		LoginMaxFailures:    8,
 		LoginWindowSeconds:  900,
 		LoginLockoutSeconds: 900,
+		UpstreamTransport:   TransportTLSClient,
+		TLSProfile:          DefaultTLSProfile,
+		DeviceID:            "device-test",
+		SessionID:           "session-test",
 		LogFormat:           "json",
 		LogLevel:            "info",
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected unknown environment to fail validation")
+	}
+}
+
+func TestLoadGeneratesGlobalFingerprint(t *testing.T) {
+	t.Setenv("VOICE_DEVICE_ID", "")
+	t.Setenv("VOICE_SESSION_ID", "")
+	cfg := Load()
+	if cfg.DeviceID == "" || cfg.SessionID == "" {
+		t.Fatalf("expected auto-generated fingerprint, got device=%q session=%q", cfg.DeviceID, cfg.SessionID)
+	}
+	if cfg.UpstreamTransport != TransportTLSClient {
+		t.Fatalf("default transport=%q", cfg.UpstreamTransport)
+	}
+	if cfg.TLSProfile != DefaultTLSProfile {
+		t.Fatalf("default TLS profile=%q", cfg.TLSProfile)
+	}
+	if cfg.Impersonate != "edge_101" {
+		t.Fatalf("default impersonate=%q", cfg.Impersonate)
+	}
+	if !strings.Contains(cfg.DefaultUA, "Edg/143") {
+		t.Fatalf("expected Edge 143 UA, got %q", cfg.DefaultUA)
+	}
+	if !strings.Contains(cfg.SecCHUA, "Microsoft Edge") {
+		t.Fatalf("expected Edge sec-ch-ua, got %q", cfg.SecCHUA)
+	}
+	if cfg.ClientVersion != "prod-be885abbfcfe7b1f511e88b3003d9ee44757fbad" {
+		t.Fatalf("client version=%q", cfg.ClientVersion)
+	}
+	if cfg.ClientBuildNumber != "5955942" {
+		t.Fatalf("client build=%q", cfg.ClientBuildNumber)
+	}
+}
+
+func TestValidateRejectsUnknownTransport(t *testing.T) {
+	cfg := Config{
+		Environment:         EnvironmentDevelopment,
+		AuthUsername:        "admin",
+		AuthPassword:        "secret",
+		TokenEncryptionKey:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		DatabaseFile:        "voice.db",
+		AuthSessionTTL:      60,
+		LoginMaxFailures:    8,
+		LoginWindowSeconds:  900,
+		LoginLockoutSeconds: 900,
+		UpstreamTransport:   "browser",
+		TLSProfile:          DefaultTLSProfile,
+		DeviceID:            "d",
+		SessionID:           "s",
+		LogFormat:           "json",
+		LogLevel:            "info",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected unknown transport to fail")
 	}
 }
 
@@ -110,6 +183,10 @@ func TestLoadPreservesPasswordWhitespace(t *testing.T) {
 func TestValidateProductionForbidsSkipSSLVerify(t *testing.T) {
 	cfg := Config{
 		Environment:         EnvironmentProduction,
+		UpstreamTransport:   TransportTLSClient,
+		TLSProfile:          DefaultTLSProfile,
+		DeviceID:            "device-test",
+		SessionID:           "session-test",
 		AuthUsername:        "admin",
 		AuthPassword:        "secret",
 		TokenEncryptionKey:  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",

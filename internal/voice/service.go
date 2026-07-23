@@ -31,10 +31,10 @@ const (
 	conversationURLPrefix = "https://chatgpt.com/backend-api/conversation/"
 	// Probe is a quick liveness check. Keep it short so the accounts panel
 	// does not sit on "checking…" while an unreachable upstream path dials chatgpt.com.
-	probeTimeout     = 12 * time.Second
-	probeDialTimeout = 8 * time.Second
-	probeTLSTimeout  = 8 * time.Second
-	probeBodyLimit   = 64 << 10
+	probeTimeout      = 12 * time.Second
+	probeDialTimeout  = 8 * time.Second
+	probeTLSTimeout   = 8 * time.Second
+	probeBodyLimit    = 64 << 10
 	titleFetchTimeout = 15 * time.Second
 	titleBodyLimit    = 2 << 20
 )
@@ -70,16 +70,15 @@ func (e *ServiceError) Error() string { return e.Message }
 // UpstreamContext is the chatgpt.com conversation continuity state learned from
 // DataChannel events or supplied by a reconnecting client.
 type UpstreamContext struct {
-	ConversationID          string `json:"upstream_conversation_id,omitempty"`
-	ParentMessageID         string `json:"upstream_parent_message_id,omitempty"`
-	UpstreamVoiceSessionID  string `json:"upstream_voice_session_id,omitempty"`
+	ConversationID         string `json:"upstream_conversation_id,omitempty"`
+	ParentMessageID        string `json:"upstream_parent_message_id,omitempty"`
+	UpstreamVoiceSessionID string `json:"upstream_voice_session_id,omitempty"`
 }
 
 type sessionBinding struct {
 	Owner                  string
 	AccountID              int64
 	AccessToken            string
-	DeviceID               string
 	Proxy                  string
 	UpstreamVoiceSessionID string
 	ConversationID         string
@@ -221,7 +220,6 @@ func (s *Service) bindVoiceSession(owner, sessionID, token string, account accou
 		Owner:                  owner,
 		AccountID:              account.ID,
 		AccessToken:            token,
-		DeviceID:               account.DeviceID,
 		Proxy:                  account.Proxy,
 		UpstreamVoiceSessionID: merged.UpstreamVoiceSessionID,
 		ConversationID:         merged.ConversationID,
@@ -368,12 +366,11 @@ func (s *Service) FetchUpstreamTitle(owner, voiceSessionID, conversationID strin
 	}
 
 	// Rehydrate sticky account from durable metadata when memory was released.
-	var accessToken, device, proxy string
+	var accessToken, proxy string
 	var accountID int64
 	var storedConversationID string
 	if binding != nil {
 		accessToken = binding.AccessToken
-		device = binding.DeviceID
 		proxy = binding.Proxy
 		accountID = binding.AccountID
 		storedConversationID = binding.ConversationID
@@ -396,7 +393,6 @@ func (s *Service) FetchUpstreamTitle(owner, voiceSessionID, conversationID strin
 			return nil, &ServiceError{Message: err.Error(), StatusCode: 503}
 		}
 		accessToken = token
-		device = account.DeviceID
 		proxy = account.Proxy
 		accountID = account.ID
 		storedConversationID = row.UpstreamConversationID
@@ -422,10 +418,7 @@ func (s *Service) FetchUpstreamTitle(owner, voiceSessionID, conversationID strin
 		}
 	}
 
-	if strings.TrimSpace(device) == "" {
-		device = uuid.New().String()
-	}
-	status, contentType, body, err := s.getConversationOnce(accessToken, device, proxy, upstreamID)
+	status, contentType, body, err := s.getConversationOnce(accessToken, proxy, upstreamID)
 	if err != nil {
 		s.logger.Warn("upstream_title_fetch_failed", "voice_session_id", sessionID, "error", err)
 		return nil, &ServiceError{
@@ -477,7 +470,7 @@ func (s *Service) FetchUpstreamTitle(owner, voiceSessionID, conversationID strin
 	return result, nil
 }
 
-func (s *Service) getConversationOnce(token, device, proxy, conversationID string) (status int, contentType, text string, err error) {
+func (s *Service) getConversationOnce(token, proxy, conversationID string) (status int, contentType, text string, err error) {
 	client := httpclient.New(s.httpOptions, proxy)
 	client.Timeout = titleFetchTimeout
 	prefix := s.conversationURLPrefix
@@ -489,7 +482,7 @@ func (s *Service) getConversationOnce(token, device, proxy, conversationID strin
 	if err != nil {
 		return 0, "", "", err
 	}
-	req.Header = s.authHeaders(token, device, map[string]string{
+	req.Header = s.authHeaders(token, map[string]string{
 		"accept": "application/json, text/plain, */*",
 	})
 	resp, err := client.Do(req)
@@ -668,13 +661,31 @@ func buildSessionJSON(voice, voiceMode, languageCode string, upstream UpstreamCo
 	return string(data)
 }
 
-func (s *Service) authHeaders(token, deviceID string, extra map[string]string) http.Header {
+func (s *Service) authHeaders(token string, extra map[string]string) http.Header {
+	// Header set aligned with ChatGPT2API-GO UpstreamClient.headers (Edge 143 persona).
 	h := http.Header{}
 	h.Set("accept", "*/*")
+	h.Set("accept-language", "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7")
+	h.Set("cache-control", "no-cache")
+	h.Set("pragma", "no-cache")
+	h.Set("priority", "u=1, i")
 	h.Set("origin", "https://chatgpt.com")
 	h.Set("referer", "https://chatgpt.com/")
 	h.Set("user-agent", s.cfg.DefaultUA)
-	h.Set("oai-device-id", deviceID)
+	h.Set("sec-ch-ua", s.cfg.SecCHUA)
+	h.Set("sec-ch-ua-arch", s.cfg.SecCHUAArch)
+	h.Set("sec-ch-ua-bitness", s.cfg.SecCHUABitness)
+	h.Set("sec-ch-ua-full-version", s.cfg.SecCHUAFullVersion)
+	h.Set("sec-ch-ua-full-version-list", s.cfg.SecCHUAFullVersionList)
+	h.Set("sec-ch-ua-mobile", s.cfg.SecCHUAMobile)
+	h.Set("sec-ch-ua-model", s.cfg.SecCHUAModel)
+	h.Set("sec-ch-ua-platform", s.cfg.SecCHUAPlatform)
+	h.Set("sec-ch-ua-platform-version", s.cfg.SecCHUAPlatformVersion)
+	h.Set("sec-fetch-dest", "empty")
+	h.Set("sec-fetch-mode", "cors")
+	h.Set("sec-fetch-site", "same-origin")
+	h.Set("oai-device-id", s.cfg.DeviceID)
+	h.Set("oai-session-id", s.cfg.SessionID)
 	h.Set("oai-language", "zh-CN")
 	h.Set("oai-client-version", s.cfg.ClientVersion)
 	h.Set("oai-client-build-number", s.cfg.ClientBuildNumber)
@@ -685,7 +696,7 @@ func (s *Service) authHeaders(token, deviceID string, extra map[string]string) h
 	return h
 }
 
-func (s *Service) postWMOnce(token, offerSDP, sessionJSON, device, proxy string) (status int, contentType, text string, err error) {
+func (s *Service) postWMOnce(token, offerSDP, sessionJSON, proxy string) (status int, contentType, text string, err error) {
 	client := httpclient.New(s.httpOptions, proxy)
 	body, ct := encodeMultipart([][2]string{
 		{"sdp", offerSDP},
@@ -695,7 +706,7 @@ func (s *Service) postWMOnce(token, offerSDP, sessionJSON, device, proxy string)
 	if err != nil {
 		return 0, "", "", err
 	}
-	req.Header = s.authHeaders(token, device, map[string]string{"content-type": ct})
+	req.Header = s.authHeaders(token, map[string]string{"content-type": ct})
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -743,11 +754,7 @@ func (s *Service) ProbeAccountToken(accountID int64) (*ProbeResult, error) {
 		}
 	}
 
-	device := strings.TrimSpace(account.DeviceID)
-	if device == "" {
-		device = uuid.New().String()
-	}
-	status, contentType, body, err := s.getSettingsUserOnce(account.AccessToken, device, account.Proxy)
+	status, contentType, body, err := s.getSettingsUserOnce(account.AccessToken, account.Proxy)
 	if err != nil {
 		result.Detail = probeNetworkDetail(err, account.Proxy)
 		s.logger.Warn("account_probe_failed", "account_id", account.ID, "proxy", account.Proxy != "", "error", err)
@@ -786,7 +793,7 @@ func (s *Service) ProbeAccountToken(accountID int64) (*ProbeResult, error) {
 	return result, nil
 }
 
-func (s *Service) getSettingsUserOnce(token, device, proxy string) (status int, contentType, text string, err error) {
+func (s *Service) getSettingsUserOnce(token, proxy string) (status int, contentType, text string, err error) {
 	client := httpclient.New(s.httpOptions, proxy)
 	client.Timeout = probeTimeout
 	if transport, ok := client.Transport.(*http.Transport); ok {
@@ -808,7 +815,7 @@ func (s *Service) getSettingsUserOnce(token, device, proxy string) (status int, 
 	if err != nil {
 		return 0, "", "", err
 	}
-	req.Header = s.authHeaders(token, device, map[string]string{
+	req.Header = s.authHeaders(token, map[string]string{
 		"accept": "application/json, text/plain, */*",
 	})
 	resp, err := client.Do(req)
@@ -1054,14 +1061,6 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 		}
 		excluded[token] = struct{}{}
 
-		device := account.DeviceID
-		if device == "" && bound != nil {
-			device = bound.DeviceID
-		}
-		if device == "" {
-			device = uuid.New().String()
-		}
-
 		explicitProxy := account.Proxy
 		if explicitProxy == "" && bound != nil {
 			explicitProxy = bound.Proxy
@@ -1071,7 +1070,7 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 			proxySource = "account"
 		}
 
-		status, _, text, err := s.postWMOnce(token, offerSDP, sessionJSON, device, explicitProxy)
+		status, contentType, text, err := s.postWMOnce(token, offerSDP, sessionJSON, explicitProxy)
 		if err != nil {
 			s.logger.Error("upstream_realtime_request_failed", "account_id", account.ID, "attempt", attempt, "error", err)
 			return nil, &ServiceError{
@@ -1110,9 +1109,14 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 		}
 
 		if (status != 200 && status != 201) || !strings.HasPrefix(strings.TrimLeft(text, " \t\r\n"), "v=0") {
-			s.logger.Warn("upstream_realtime_rejected", "account_id", account.ID, "upstream_status", status, "attempt", attempt)
+			kind := classifyProbeBody(contentType, text)
+			s.logger.Warn("upstream_realtime_rejected", "account_id", account.ID, "upstream_status", status, "content_kind", kind, "attempt", attempt)
+			msg := fmt.Sprintf("realtime/wm failed status=%d", status)
+			if kind == "html" {
+				msg = "upstream blocked by Cloudflare or challenge page"
+			}
 			return nil, &ServiceError{
-				Message:    fmt.Sprintf("realtime/wm failed status=%d", status),
+				Message:    msg,
 				StatusCode: 502,
 				Detail:     truncate(text, 500),
 			}

@@ -18,7 +18,7 @@ func TestNewUsesProcessProxyEnvironmentWhenAccountProxyEmpty(t *testing.T) {
 	t.Setenv("https_proxy", "")
 	t.Setenv("no_proxy", "")
 
-	client := New(Options{}, "")
+	client := New(Options{Transport: config.TransportGo}, "")
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("unexpected transport type %T", client.Transport)
@@ -57,7 +57,7 @@ func TestNewAccountProxyOverridesEnvironmentProxy(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://env-proxy.example:8080")
 	t.Setenv("HTTPS_PROXY", "http://env-proxy.example:8080")
 
-	client := New(Options{}, "http://account-proxy.example:8080")
+	client := New(Options{Transport: config.TransportGo}, "http://account-proxy.example:8080")
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("unexpected transport type %T", client.Transport)
@@ -84,7 +84,7 @@ func TestNewRejectsInvalidAccountProxyWithoutFallingBackOrLeakingCredentials(t *
 	t.Setenv("HTTP_PROXY", "http://env-proxy.example:8080")
 	t.Setenv("HTTPS_PROXY", "http://env-proxy.example:8080")
 
-	client := New(Options{}, "ftp://proxy-user:proxy-secret@account-proxy.example:21")
+	client := New(Options{Transport: config.TransportGo}, "ftp://proxy-user:proxy-secret@account-proxy.example:21")
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("unexpected transport type %T", client.Transport)
@@ -106,6 +106,7 @@ func TestNewForcesTLSVerificationInProduction(t *testing.T) {
 	client := New(Options{
 		Environment:   config.EnvironmentProduction,
 		SkipSSLVerify: true,
+		Transport:     config.TransportGo,
 	}, "")
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {
@@ -120,6 +121,7 @@ func TestNewAllowsSkipTLSVerificationInDevelopment(t *testing.T) {
 	client := New(Options{
 		Environment:   config.EnvironmentDevelopment,
 		SkipSSLVerify: true,
+		Transport:     config.TransportGo,
 	}, "")
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok {
@@ -132,10 +134,100 @@ func TestNewAllowsSkipTLSVerificationInDevelopment(t *testing.T) {
 
 func TestFromConfig(t *testing.T) {
 	opts := FromConfig(config.Config{
-		Environment:   config.EnvironmentDevelopment,
-		SkipSSLVerify: true,
+		Environment:       config.EnvironmentDevelopment,
+		SkipSSLVerify:     true,
+		UpstreamTransport: config.TransportCurlImpersonate,
+		TLSProfile:        config.DefaultTLSProfile,
+		Impersonate:       "edge_101",
+		DataDir:           "/tmp/data",
 	})
 	if opts.Environment != config.EnvironmentDevelopment || !opts.SkipSSLVerify {
 		t.Fatalf("unexpected options: %+v", opts)
+	}
+	if opts.Transport != config.TransportCurlImpersonate || opts.Impersonate != "edge_101" || opts.DataDir != "/tmp/data" {
+		t.Fatalf("unexpected transport options: %+v", opts)
+	}
+	if opts.TLSProfile != config.DefaultTLSProfile {
+		t.Fatalf("TLS profile not copied: %+v", opts)
+	}
+}
+
+func TestNewDefaultUsesTLSClient(t *testing.T) {
+	client := New(Options{}, "")
+	if _, ok := client.Transport.(*tlsClientRoundTripper); !ok {
+		t.Fatalf("expected default tlsClientRoundTripper, got %T", client.Transport)
+	}
+}
+
+func TestNewCurlTransportUsesRoundTripper(t *testing.T) {
+	client := New(Options{
+		Transport:   config.TransportCurlImpersonate,
+		Impersonate: "edge_101",
+	}, "")
+	if _, ok := client.Transport.(*curlRoundTripper); !ok {
+		t.Fatalf("expected curlRoundTripper, got %T", client.Transport)
+	}
+}
+
+func TestResolveTLSProfileDefaultsAndAliases(t *testing.T) {
+	def := resolveTLSProfile("")
+	if def.GetClientHelloStr() == "" {
+		t.Fatal("default profile should resolve")
+	}
+	// edge_101 maps to chrome_120 (ChatGPT2API-GO fallback when Edge profile missing).
+	edge := resolveTLSProfile("edge_101")
+	if edge.GetClientHelloStr() == "" {
+		t.Fatal("edge_101 should resolve via chrome_120 fallback")
+	}
+	chrome133 := resolveTLSProfile("chrome_133")
+	if chrome133.GetClientHelloStr() == "" {
+		t.Fatal("chrome_133 should resolve")
+	}
+	_ = resolveTLSProfile("not-a-real-profile")
+}
+
+func TestCurlBinaryCandidatesPreferProfile(t *testing.T) {
+	names := curlBinaryCandidates("edge_101")
+	if len(names) == 0 || names[0] != "curl_edge101" {
+		t.Fatalf("unexpected candidates: %v", names)
+	}
+	defaults := curlBinaryCandidates("")
+	if len(defaults) == 0 || defaults[0] != "curl_edge101" {
+		t.Fatalf("default candidates: %v", defaults)
+	}
+}
+
+func TestHeaderKeysOrdersBrowserHeaders(t *testing.T) {
+	h := http.Header{}
+	h.Set("Authorization", "Bearer x")
+	h.Set("User-Agent", "ua")
+	h.Set("Oai-Device-Id", "d")
+	keys := headerKeys(h)
+	if len(keys) < 3 {
+		t.Fatalf("keys=%v", keys)
+	}
+	ua, auth := -1, -1
+	for i, k := range keys {
+		switch http.CanonicalHeaderKey(k) {
+		case "User-Agent":
+			ua = i
+		case "Authorization":
+			auth = i
+		}
+	}
+	if ua < 0 || auth < 0 || ua > auth {
+		t.Fatalf("unexpected order: %v", keys)
+	}
+}
+
+func TestFormatTransport(t *testing.T) {
+	if got := FormatTransport(Options{}); !strings.HasPrefix(got, "tls-client/") {
+		t.Fatalf("FormatTransport(empty)=%q", got)
+	}
+	if got := FormatTransport(Options{Transport: config.TransportGo}); got != "go" {
+		t.Fatalf("got %q", got)
+	}
+	if got := FormatTransport(Options{Transport: config.TransportCurlImpersonate, Impersonate: "edge_101"}); got != "curl-impersonate/edge_101" {
+		t.Fatalf("got %q", got)
 	}
 }
