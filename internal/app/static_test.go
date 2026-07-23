@@ -17,6 +17,9 @@ func TestRegisterStaticRoutesUsesCleanURLs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(staticDir, "accounts.html"), []byte("accounts page"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(staticDir, "keys.html"), []byte("keys page"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	mux := http.NewServeMux()
 	registerStaticRoutes(mux, staticDir)
@@ -24,6 +27,7 @@ func TestRegisterStaticRoutesUsesCleanURLs(t *testing.T) {
 	for path, wantBody := range map[string]string{
 		"/voice":    "voice page",
 		"/accounts": "accounts page",
+		"/keys":     "keys page",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		resp := httptest.NewRecorder()
@@ -37,6 +41,7 @@ func TestRegisterStaticRoutesUsesCleanURLs(t *testing.T) {
 		"/":              "/voice",
 		"/voice.html":    "/voice",
 		"/accounts.html": "/accounts",
+		"/keys.html":     "/keys",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		resp := httptest.NewRecorder()

@@ -13,10 +13,12 @@ import (
 
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/accounts"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/api"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/apikeys"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/auth"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/config"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/conversations"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/logging"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/secretbox"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/store"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/voice"
 )
@@ -46,8 +48,26 @@ func Run() error {
 	}
 	defer db.Close()
 
-	accountPool := accounts.NewPoolFromDB(db)
+	tokenKey, err := secretbox.ParseKey(cfg.TokenEncryptionKey)
+	if err != nil {
+		return fmt.Errorf("invalid VOICE_TOKEN_ENCRYPTION_KEY: %w", err)
+	}
+	tokenBox, err := secretbox.New(tokenKey)
+	if err != nil {
+		return fmt.Errorf("token encryption setup failed: %w", err)
+	}
+
+	accountPool := accounts.NewPoolFromDB(db).WithBox(tokenBox)
+	rewritten, err := accountPool.SealStoredTokens()
+	if err != nil {
+		return fmt.Errorf("seal stored access tokens failed: %w", err)
+	}
+	if rewritten > 0 {
+		logger.Info("access_tokens_sealed", "rewritten_accounts", rewritten)
+	}
+
 	conversationStore := conversations.NewStore(db)
+	apiKeyStore := apikeys.NewStore(db)
 	available, err := accountPool.AvailableCount()
 	if err != nil {
 		return fmt.Errorf("account database check failed: %w", err)
@@ -60,14 +80,16 @@ func Run() error {
 		time.Duration(cfg.AuthSessionTTL)*time.Second,
 		logger,
 	)
+	apiKeyManager := auth.NewAPIKeyManager(apiKeyStore, logger)
 	voiceService := voice.New(cfg, accountPool, logger)
 	apiServer := api.New(api.Dependencies{
 		Voice:         voiceService,
 		Accounts:      accountPool,
 		Conversations: conversationStore,
+		APIKeys:       apiKeyStore,
 	})
 
-	handler := newHandler(cfg, authManager, apiServer, logger)
+	handler := newHandler(cfg, authManager, apiKeyManager, apiServer, logger)
 	server := &http.Server{
 		Addr:              normalizeListenAddr(cfg.ListenAddr),
 		Handler:           handler,
@@ -114,10 +136,12 @@ func Run() error {
 	}
 }
 
-func newHandler(cfg config.Config, authManager *auth.Manager, apiServer *api.Server, logger *slog.Logger) http.Handler {
+func newHandler(cfg config.Config, authManager *auth.Manager, apiKeyManager *auth.APIKeyManager, apiServer *api.Server, logger *slog.Logger) http.Handler {
 	protected := http.NewServeMux()
 	apiServer.Register(protected)
 	registerStaticRoutes(protected, cfg.StaticDir)
+	downstream := http.NewServeMux()
+	apiServer.RegisterDownstream(downstream)
 
 	root := http.NewServeMux()
 	root.Handle("GET /login", authManager.LoginPage(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +150,7 @@ func newHandler(cfg config.Config, authManager *auth.Manager, apiServer *api.Ser
 	root.HandleFunc("POST /api/auth/login", authManager.HandleLogin)
 	root.Handle("POST /api/auth/logout", authManager.Require(http.HandlerFunc(authManager.HandleLogout)))
 	root.Handle("GET /api/auth/session", authManager.Require(http.HandlerFunc(authManager.HandleSession)))
+	root.Handle("/v1/", apiKeyManager.Require(downstream))
 	root.Handle("/", authManager.Require(protected))
 
 	return logging.HTTPMiddleware(logger, securityHeaders(root))

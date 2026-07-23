@@ -13,6 +13,7 @@ import (
 
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/accounts"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/config"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/secretbox"
 )
 
 func TestNormalizeVoice(t *testing.T) {
@@ -32,6 +33,37 @@ func TestNormalizeVoice(t *testing.T) {
 	}
 }
 
+func TestConfigAndSessionOptionValidation(t *testing.T) {
+	cfg := Config()
+	if cfg.Version != "v1" || cfg.Defaults.Voice != "cove" || len(cfg.Voices) != 9 || len(cfg.Languages) < 60 {
+		t.Fatalf("unexpected public config: %+v", cfg)
+	}
+	if cfg.WebRTC.DataChannel.Label != "oai-events" || !cfg.WebRTC.DataChannel.Negotiated || cfg.WebRTC.DataChannel.ID != 0 {
+		t.Fatalf("unexpected WebRTC config: %+v", cfg.WebRTC)
+	}
+
+	options, err := normalizeSessionOptions("Arbor", "", "ZH-CN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.Voice != "fathom" || options.VoiceMode != "wingman" || options.LanguageCode != "zh-cn" {
+		t.Fatalf("unexpected normalized options: %+v", options)
+	}
+	for _, tc := range []struct {
+		voice    string
+		mode     string
+		language string
+	}{
+		{voice: "unknown"},
+		{mode: "unknown"},
+		{language: "xx-invalid"},
+	} {
+		if _, err := normalizeSessionOptions(tc.voice, tc.mode, tc.language); err == nil {
+			t.Fatalf("expected validation error for %+v", tc)
+		}
+	}
+}
+
 func TestNormalizeSDP(t *testing.T) {
 	_, err := normalizeSDP("not-sdp")
 	if err == nil {
@@ -43,6 +75,41 @@ func TestNormalizeSDP(t *testing.T) {
 	}
 	if out != "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n" {
 		t.Fatalf("unexpected sdp: %q", out)
+	}
+}
+
+func TestVoiceSessionOwnership(t *testing.T) {
+	svc := New(config.Config{SessionTTLSeconds: 3600}, nil, nil)
+	account := accounts.Account{ID: 7, DeviceID: "device", Proxy: "http://proxy.example:8080"}
+	id := svc.bindVoiceSession("api_key:1", "", "token", account)
+	if id == "" {
+		t.Fatal("missing voice session ID")
+	}
+	owned, forbidden := svc.boundVoiceSession("api_key:1", id)
+	if forbidden || owned == nil || owned.AccountID != account.ID {
+		t.Fatalf("unexpected owned binding: binding=%+v forbidden=%v", owned, forbidden)
+	}
+	if binding, forbidden := svc.boundVoiceSession("api_key:2", id); binding != nil || !forbidden {
+		t.Fatalf("cross-key binding was not rejected: binding=%+v forbidden=%v", binding, forbidden)
+	}
+	if svc.ReleaseSession("api_key:2", id) {
+		t.Fatal("another key released the voice session")
+	}
+	if !svc.ReleaseSession("api_key:1", id) {
+		t.Fatal("owner could not release the voice session")
+	}
+}
+
+func TestCreateSessionRejectsUnknownCallerSuppliedSessionID(t *testing.T) {
+	svc := New(config.Config{}, nil, nil)
+	_, err := svc.CreateSession(CreateSessionRequest{
+		Owner:          "api_key:1",
+		OfferSDP:       "v=0\r\noffer\r\n",
+		VoiceSessionID: "vs_missing",
+	})
+	serviceErr, ok := err.(*ServiceError)
+	if !ok || serviceErr.StatusCode != http.StatusNotFound {
+		t.Fatalf("unexpected error: %T %v", err, err)
 	}
 }
 
@@ -174,6 +241,15 @@ func testPool(t *testing.T) *accounts.Pool {
 	if err != nil {
 		t.Fatal(err)
 	}
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 7)
+	}
+	box, err := secretbox.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool.WithBox(box)
 	t.Cleanup(func() { _ = pool.Close() })
 	return pool
 }

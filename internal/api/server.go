@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/accounts"
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/apikeys"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/conversations"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/voice"
 )
@@ -29,10 +30,19 @@ type ConversationStore interface {
 	UpsertMessage(owner, conversationID string, message conversations.Message) (conversations.Message, error)
 }
 
+// APIKeyStore is the administrator-facing API key management surface.
+type APIKeyStore interface {
+	List() ([]apikeys.Key, error)
+	Create(name string) (apikeys.CreatedKey, error)
+	Update(id int64, update apikeys.Update) (apikeys.Key, error)
+	Delete(id int64) error
+	Stats() (apikeys.Stats, error)
+}
+
 // VoiceService is the voice-session surface required by handlers.
 type VoiceService interface {
 	CreateSession(req voice.CreateSessionRequest) (*voice.SessionResult, error)
-	ReleaseSession(voiceSessionID string) bool
+	ReleaseSession(owner, voiceSessionID string) bool
 	ProbeAccountToken(accountID int64) (*voice.ProbeResult, error)
 }
 
@@ -42,6 +52,7 @@ type Dependencies struct {
 	Voice         VoiceService
 	Accounts      AccountStore
 	Conversations ConversationStore
+	APIKeys       APIKeyStore
 }
 
 // Server holds HTTP handlers for the voice gateway.
@@ -49,6 +60,7 @@ type Server struct {
 	voice         VoiceService
 	accounts      AccountStore
 	conversations ConversationStore
+	apiKeys       APIKeyStore
 }
 
 // New creates an API server from domain dependencies.
@@ -57,6 +69,7 @@ func New(deps Dependencies) *Server {
 		voice:         deps.Voice,
 		accounts:      deps.Accounts,
 		conversations: deps.Conversations,
+		apiKeys:       deps.APIKeys,
 	}
 }
 
@@ -65,17 +78,30 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/voice/health", s.health)
 	mux.HandleFunc("POST /api/voice/session", s.session)
 	mux.HandleFunc("POST /api/voice/session/release", s.release)
+	mux.HandleFunc("GET /api/voice/config", s.voiceConfig)
 	mux.HandleFunc("GET /api/accounts", s.listAccounts)
 	mux.HandleFunc("POST /api/accounts", s.createAccount)
 	mux.HandleFunc("PUT /api/accounts/{id}", s.updateAccount)
 	mux.HandleFunc("DELETE /api/accounts/{id}", s.deleteAccount)
 	mux.HandleFunc("POST /api/accounts/{id}/check", s.checkAccount)
+	mux.HandleFunc("GET /api/keys", s.listAPIKeys)
+	mux.HandleFunc("POST /api/keys", s.createAPIKey)
+	mux.HandleFunc("PATCH /api/keys/{id}", s.updateAPIKey)
+	mux.HandleFunc("DELETE /api/keys/{id}", s.deleteAPIKey)
 	mux.HandleFunc("GET /api/conversations", s.listConversations)
 	mux.HandleFunc("POST /api/conversations", s.createConversation)
 	mux.HandleFunc("GET /api/conversations/{id}", s.getConversation)
 	mux.HandleFunc("PATCH /api/conversations/{id}", s.updateConversation)
 	mux.HandleFunc("DELETE /api/conversations/{id}", s.deleteConversation)
 	mux.HandleFunc("POST /api/conversations/{id}/messages", s.upsertConversationMessage)
+}
+
+// RegisterDownstream mounts the API-key-only public integration surface.
+func (s *Server) RegisterDownstream(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/health", s.downstreamHealth)
+	mux.HandleFunc("GET /v1/voice/config", s.voiceConfig)
+	mux.HandleFunc("POST /v1/voice/sessions", s.downstreamSession)
+	mux.HandleFunc("DELETE /v1/voice/sessions/{id}", s.downstreamRelease)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

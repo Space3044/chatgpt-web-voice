@@ -31,17 +31,6 @@ const (
 	probeBodyLimit   = 64 << 10
 )
 
-var allowedRealtimeVoices = map[string]struct{}{
-	"breeze": {}, "cove": {}, "ember": {}, "fathom": {}, "glimmer": {},
-	"juniper": {}, "maple": {}, "orbit": {}, "vale": {},
-}
-
-var realtimeVoiceAliases = map[string]string{
-	"arbor":  "fathom",
-	"sol":    "glimmer",
-	"spruce": "orbit",
-}
-
 // AccountRepository is the account-pool surface required by the voice gateway.
 // Concrete type is *accounts.Pool; the interface keeps this package free of
 // storage-construction details.
@@ -61,6 +50,7 @@ type ServiceError struct {
 func (e *ServiceError) Error() string { return e.Message }
 
 type sessionBinding struct {
+	Owner       string
 	AccountID   int64
 	AccessToken string
 	DeviceID    string
@@ -103,19 +93,23 @@ type SessionResult struct {
 	AnswerSDP      string `json:"answer_sdp"`
 	Voice          string `json:"voice"`
 	VoiceMode      string `json:"voice_mode"`
+	LanguageCode   string `json:"language_code"`
 	SessionID      string `json:"session_id"`
 	VoiceSessionID string `json:"voice_session_id"`
 }
 
 func normalizeVoice(voice string) string {
 	clean := strings.ToLower(strings.TrimSpace(voice))
+	if clean == "" {
+		return defaultVoice
+	}
 	if alias, ok := realtimeVoiceAliases[clean]; ok {
 		clean = alias
 	}
 	if _, ok := allowedRealtimeVoices[clean]; ok {
 		return clean
 	}
-	return "cove"
+	return defaultVoice
 }
 
 func newVoiceSessionID() string {
@@ -135,7 +129,8 @@ func (s *Service) cleanupBindingsLocked(now time.Time) {
 	}
 }
 
-func (s *Service) bindVoiceSession(sessionID, token string, account accounts.Account) string {
+func (s *Service) bindVoiceSession(owner, sessionID, token string, account accounts.Account) string {
+	owner = normalizeSessionOwner(owner)
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		sessionID = newVoiceSessionID()
@@ -145,6 +140,7 @@ func (s *Service) bindVoiceSession(sessionID, token string, account accounts.Acc
 	defer s.mu.Unlock()
 	s.cleanupBindingsLocked(now)
 	s.bindings[sessionID] = &sessionBinding{
+		Owner:       owner,
 		AccountID:   account.ID,
 		AccessToken: token,
 		DeviceID:    account.DeviceID,
@@ -156,24 +152,27 @@ func (s *Service) bindVoiceSession(sessionID, token string, account accounts.Acc
 }
 
 // ReleaseSession unbinds a voice_session_id.
-func (s *Service) ReleaseSession(voiceSessionID string) bool {
+func (s *Service) ReleaseSession(owner, voiceSessionID string) bool {
+	owner = normalizeSessionOwner(owner)
 	sessionID := strings.TrimSpace(voiceSessionID)
 	if sessionID == "" {
 		return false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, ok := s.bindings[sessionID]
-	if ok {
+	item, ok := s.bindings[sessionID]
+	if ok && item.Owner == owner {
 		delete(s.bindings, sessionID)
+		return true
 	}
-	return ok
+	return false
 }
 
-func (s *Service) boundVoiceSession(voiceSessionID string) *sessionBinding {
+func (s *Service) boundVoiceSession(owner, voiceSessionID string) (binding *sessionBinding, ownedByOther bool) {
+	owner = normalizeSessionOwner(owner)
 	sessionID := strings.TrimSpace(voiceSessionID)
 	if sessionID == "" {
-		return nil
+		return nil, false
 	}
 	now := time.Now()
 	s.mu.Lock()
@@ -181,11 +180,22 @@ func (s *Service) boundVoiceSession(voiceSessionID string) *sessionBinding {
 	s.cleanupBindingsLocked(now)
 	item := s.bindings[sessionID]
 	if item == nil {
-		return nil
+		return nil, false
+	}
+	if item.Owner != owner {
+		return nil, true
 	}
 	item.UpdatedAt = now
 	cp := *item
-	return &cp
+	return &cp, false
+}
+
+func normalizeSessionOwner(owner string) string {
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return "internal"
+	}
+	return owner
 }
 
 func encodeMultipart(fields [][2]string) (body []byte, contentType string) {
@@ -217,12 +227,6 @@ func normalizeSDP(offerSDP string) (string, error) {
 
 func buildSessionJSON(voice, voiceMode, languageCode string) string {
 	sid := strings.ToUpper(uuid.New().String())
-	if languageCode == "" {
-		languageCode = "auto"
-	}
-	if voiceMode == "" {
-		voiceMode = "wingman"
-	}
 	payload := map[string]any{
 		"backend_reasoning_effort":      "instant",
 		"language_code":                 languageCode,
@@ -469,6 +473,7 @@ func probeDetail(body string) string {
 
 // CreateSessionRequest is the input for CreateSession.
 type CreateSessionRequest struct {
+	Owner          string
 	OfferSDP       string
 	Voice          string
 	VoiceMode      string
@@ -482,13 +487,24 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 	if err != nil {
 		return nil, err
 	}
-	voice := normalizeVoice(req.Voice)
-	bound := s.boundVoiceSession(req.VoiceSessionID)
+	options, err := normalizeSessionOptions(req.Voice, req.VoiceMode, req.LanguageCode)
+	if err != nil {
+		return nil, err
+	}
+	voice := options.Voice
+	owner := normalizeSessionOwner(req.Owner)
+	bound, ownedByOther := s.boundVoiceSession(owner, req.VoiceSessionID)
+	if ownedByOther {
+		return nil, &ServiceError{Message: "voice session does not belong to caller", StatusCode: 403}
+	}
+	if strings.TrimSpace(req.VoiceSessionID) != "" && bound == nil {
+		return nil, &ServiceError{Message: "voice session not found", StatusCode: 404}
+	}
 	preferred := ""
 	if bound != nil && bound.AccessToken != "" {
 		preferred = bound.AccessToken
 	}
-	sessionJSON := buildSessionJSON(voice, req.VoiceMode, req.LanguageCode)
+	sessionJSON := buildSessionJSON(voice, options.VoiceMode, options.LanguageCode)
 	excluded := map[string]struct{}{}
 	var lastError string
 	var lastDetail any
@@ -501,7 +517,7 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 		}
 		token, account, err := s.pool.Pick(pickPreferred, excluded)
 		if err != nil && pickPreferred != "" {
-			s.ReleaseSession(req.VoiceSessionID)
+			s.ReleaseSession(owner, req.VoiceSessionID)
 			preferred = ""
 			token, account, err = s.pool.Pick("", excluded)
 		}
@@ -549,7 +565,7 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 			}
 			s.logger.Warn("upstream_account_rejected", "account_id", account.ID, "upstream_status", status, "attempt", attempt)
 			if bound != nil && token == bound.AccessToken {
-				s.ReleaseSession(req.VoiceSessionID)
+				s.ReleaseSession(owner, req.VoiceSessionID)
 			}
 			preferred = ""
 			continue
@@ -564,14 +580,15 @@ func (s *Service) CreateSession(req CreateSessionRequest) (*SessionResult, error
 			}
 		}
 
-		voiceSessionID := s.bindVoiceSession(req.VoiceSessionID, token, account)
+		voiceSessionID := s.bindVoiceSession(owner, req.VoiceSessionID, token, account)
 		s.logger.Info("voice_session_created", "voice_session_id", voiceSessionID, "account_id", account.ID, "voice", voice, "proxy_source", proxySource, "attempt", attempt)
 		return &SessionResult{
 			AnswerSDP:      text,
 			SessionID:      voiceSessionID,
 			VoiceSessionID: voiceSessionID,
 			Voice:          voice,
-			VoiceMode:      orDefault(req.VoiceMode, "wingman"),
+			VoiceMode:      options.VoiceMode,
+			LanguageCode:   options.LanguageCode,
 		}, nil
 	}
 

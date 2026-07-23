@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>API 密钥 · Voice Gateway</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2310a37f'/%3E%3Cpath d='M16 34h8l4-14 8 27 5-18h7' fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <script>
+    (function () {
+      try {
+        var theme = localStorage.getItem('chatgpt_web_voice_theme_v1');
+        if (theme !== 'light' && theme !== 'dark') theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #fff;
+      --surface: #fff;
+      --surface-2: #f7f7f8;
+      --ink: #111113;
+      --muted: #6b6b73;
+      --line: #ebebef;
+      --green: #10a37f;
+      --green-dark: #0d8c6d;
+      --green-soft: rgba(16, 163, 127, .11);
+      --red: #e11d48;
+      --red-soft: rgba(225, 29, 72, .08);
+      --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+      --focus: 0 0 0 3px rgba(16,163,127,.22);
+      --topbar-bg: rgba(255,255,255,.92);
+      --chip-bg: #fff;
+      --chip-hover: #f0f0f2;
+      --row-hover: #fafafa;
+      --input-bg: #fff;
+      --dialog-backdrop: rgba(15,15,18,.42);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f0f10;
+      --surface: #161618;
+      --surface-2: #1c1c1f;
+      --ink: #f4f4f5;
+      --muted: #a1a1aa;
+      --line: #2a2a2e;
+      --green-dark: #35c89f;
+      --green-soft: rgba(16,163,127,.18);
+      --red: #fb7185;
+      --red-soft: rgba(251,113,133,.12);
+      --shadow: 0 1px 2px rgba(0,0,0,.25), 0 12px 32px rgba(0,0,0,.35);
+      --focus: 0 0 0 3px rgba(16,163,127,.32);
+      --topbar-bg: rgba(15,15,16,.92);
+      --chip-bg: #1c1c1f;
+      --chip-hover: #26262a;
+      --row-hover: #1a1a1d;
+      --input-bg: #1c1c1f;
+      --dialog-backdrop: rgba(0,0,0,.58);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: "Inter", "Segoe UI", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    button, input { font: inherit; }
+    button:focus-visible, input:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus); }
+    .topbar {
+      position: sticky; top: 0; z-index: 30;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 20px;
+      background: var(--topbar-bg); border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 0; color: var(--ink); text-decoration: none; }
+    .brand-mark {
+      width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto;
+      display: grid; place-items: center; background: var(--green); color: #fff;
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .brand-title { font-size: 14px; font-weight: 650; letter-spacing: -.01em; }
+    .top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; flex: 1 1 0; }
+    .header-chip, .nav-link, .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px;
+      background: var(--chip-bg); color: var(--ink); text-decoration: none;
+      font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    .header-chip:hover, .nav-link:hover, .btn:hover { background: var(--chip-hover); }
+    .btn-primary { color: #fff; border-color: transparent; background: var(--green); }
+    .btn-primary:hover { background: var(--green-dark); border-color: transparent; }
+    .btn-danger { color: var(--red); }
+    .btn-danger:hover { background: var(--red-soft); border-color: transparent; }
+    .btn-small { min-height: 30px; padding: 0 10px; border-radius: 8px; font-size: 11px; }
+    .layout { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 24px 0 48px; }
+    .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+    .page-head h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.03em; }
+    .key-note {
+      display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; padding: 13px 14px;
+      border: 1px solid rgba(16,163,127,.28); border-left: 4px solid var(--green); border-radius: 11px;
+      background: var(--green-soft); color: var(--muted); font-size: 12px; line-height: 1.55;
+    }
+    .key-note strong { display: block; margin-bottom: 2px; color: var(--ink); font-size: 12px; }
+    .note-mark { flex: 0 0 auto; color: var(--green-dark); font: 700 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .stat-pill {
+      display: inline-flex; align-items: baseline; gap: 6px; padding: 7px 11px;
+      border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2);
+      color: var(--muted); font-size: 12px;
+    }
+    .stat-pill strong { color: var(--ink); font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .search { position: relative; flex: 1; max-width: 360px; }
+    .search::before { content: "⌕"; position: absolute; left: 12px; top: 50%; transform: translateY(-52%); color: var(--muted); pointer-events: none; }
+    .search input {
+      width: 100%; height: 36px; padding: 0 12px 0 34px; border: 1px solid var(--line); border-radius: 9px;
+      background: var(--input-bg); color: var(--ink); outline: none;
+    }
+    .search input:focus { border-color: var(--green); box-shadow: var(--focus); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+    th {
+      padding: 13px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+      color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; text-align: center;
+    }
+    th:nth-child(1) { width: 23%; }
+    th:nth-child(2) { width: 19%; }
+    th:nth-child(3) { width: 11%; }
+    th:nth-child(4), th:nth-child(5) { width: 15%; }
+    th:nth-child(6) { width: 17%; }
+    td { padding: 14px 12px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; font-size: 13px; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: var(--row-hover); }
+    tbody tr.disabled { opacity: .72; }
+    .cell-stack { display: grid; justify-items: center; gap: 5px; min-width: 0; }
+    .cell-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+    .cell-meta { color: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .prefix {
+      display: inline-flex; max-width: 100%; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px;
+      background: var(--surface-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .badge { display: inline-flex; padding: 4px 8px; border-radius: 999px; color: var(--green-dark); background: var(--green-soft); font-size: 11px; font-weight: 650; }
+    .badge.disabled { color: var(--red); background: var(--red-soft); }
+    .actions { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+    .empty { display: none; padding: 52px 20px; text-align: center; color: var(--muted); }
+    .empty.show { display: grid; gap: 6px; }
+    .empty strong { color: var(--ink); font-size: 14px; }
+    dialog {
+      width: min(440px, calc(100% - 28px)); padding: 0; border: 1px solid var(--line); border-radius: 15px;
+      background: var(--surface); color: var(--ink); box-shadow: 0 24px 70px rgba(0,0,0,.28);
+    }
+    dialog::backdrop { background: var(--dialog-backdrop); backdrop-filter: blur(2px); }
+    .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .dialog-head h2 { margin: 0; font-size: 16px; letter-spacing: -.02em; }
+    .dialog-close { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font-size: 20px; }
+    .dialog-close:hover { background: var(--surface-2); color: var(--ink); }
+    .dialog-body { padding: 18px; }
+    .field { display: grid; gap: 7px; }
+    .field label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .field input {
+      width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px;
+      background: var(--input-bg); color: var(--ink); outline: none;
+    }
+    .field input:focus { border-color: var(--green); box-shadow: var(--focus); }
+    .field-hint, .form-message { color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .form-message { color: var(--red); }
+    .dialog-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 18px; border-top: 1px solid var(--line); }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-left: auto; }
+    .secret-callout {
+      display: grid; gap: 10px; padding: 14px; border: 1px solid rgba(16,163,127,.32); border-radius: 11px;
+      background: var(--green-soft);
+    }
+    .secret-callout strong { font-size: 13px; }
+    .secret-callout p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .secret-row { display: flex; gap: 8px; align-items: stretch; }
+    .secret-value {
+      min-width: 0; flex: 1; padding: 10px 11px; border: 1px solid var(--line); border-radius: 9px;
+      background: var(--surface); color: var(--ink); font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; z-index: 80; transform: translate(-50%, 16px);
+      max-width: min(520px, calc(100% - 32px)); padding: 10px 14px; border: 1px solid rgba(16,163,127,.3); border-radius: 10px;
+      background: var(--surface); color: var(--ink); box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+      font-size: 12px; transition: opacity .16s ease, transform .16s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 760px) {
+      .topbar { padding: 10px 12px; }
+      .top-actions .nav-link[href="/voice"] { display: none; }
+      .layout { width: min(100% - 24px, 1040px); padding-top: 18px; }
+      .page-head { align-items: flex-start; }
+      .toolbar { align-items: stretch; }
+      .search { max-width: none; }
+      thead { display: none; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      tbody tr { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+      tbody tr:last-child { border-bottom: 0; }
+      td { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 0; border: 0; text-align: right; }
+      td::before { content: attr(data-label); color: var(--muted); font-size: 11px; font-weight: 650; text-align: left; }
+      .cell-stack { justify-items: end; }
+      .actions { justify-content: flex-end; }
+    }
+    @media (max-width: 520px) {
+      .brand-title, .header-chip { display: none; }
+      .top-actions { flex: 0 0 auto; }
+      .page-head h1 { font-size: 20px; }
+      .secret-row { flex-direction: column; }
+      .dialog-foot { align-items: stretch; flex-direction: column; }
+      .dialog-actions { width: 100%; }
+      .dialog-actions .btn { flex: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/voice">
+      <span class="brand-mark">AK</span>
+      <span class="brand-title" data-i18n="brandTitle">API 密钥</span>
+    </a>
+    <div class="top-actions">
+      <button type="button" class="header-chip" id="localeButton" title="语言" aria-label="语言">中文</button>
+      <button type="button" class="header-chip" id="themeButton" title="主题" aria-label="主题">浅色</button>
+      <a class="nav-link" href="/accounts" data-i18n="accounts">账号池</a>
+      <a class="nav-link" href="/voice" data-i18n="voice">语音通话</a>
+      <button type="button" class="nav-link" id="logoutButton" data-i18n="logout">退出</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <div class="page-head">
+      <h1 data-i18n="title">下游访问密钥</h1>
+      <button type="button" class="btn btn-primary" id="createButton"><span>＋</span><span data-i18n="create">创建密钥</span></button>
+    </div>
+
+    <div class="key-note">
+      <span class="note-mark">KEY</span>
+      <div><strong data-i18n="noteTitle">完整密钥只显示一次</strong><span data-i18n="noteText">创建后立即复制并保存在下游后端。密钥只能调用 /v1 接口，不能读取账号池。</span></div>
+    </div>
+
+    <div class="stats">
+      <span class="stat-pill"><strong id="totalCount">0</strong><span data-i18n="total">全部</span></span>
+      <span class="stat-pill"><strong id="enabledCount">0</strong><span data-i18n="enabled">启用</span></span>
+      <span class="stat-pill"><strong id="disabledCount">0</strong><span data-i18n="disabled">禁用</span></span>
+    </div>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div class="search"><input id="searchInput" type="search" autocomplete="off" data-i18n-placeholder="search" placeholder="搜索名称或密钥前缀…" /></div>
+        <button type="button" class="btn" id="refreshButton" data-i18n="refresh">刷新</button>
+      </div>
+      <div class="table-wrap" id="tableWrap">
+        <table>
+          <thead><tr>
+            <th data-i18n="columnName">名称</th>
+            <th data-i18n="columnPrefix">密钥前缀</th>
+            <th data-i18n="columnStatus">状态</th>
+            <th data-i18n="columnLastUsed">最近使用</th>
+            <th data-i18n="columnCreated">创建时间</th>
+            <th data-i18n="columnActions">操作</th>
+          </tr></thead>
+          <tbody id="keyRows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="emptyState"><strong id="emptyTitle"></strong><span id="emptyText"></span></div>
+    </section>
+  </main>
+
+  <dialog id="nameDialog">
+    <form id="nameForm" novalidate>
+      <div class="dialog-head"><h2 id="nameDialogTitle"></h2><button type="button" class="dialog-close" id="nameDialogClose" aria-label="Close">×</button></div>
+      <div class="dialog-body">
+        <div class="field">
+          <label for="nameInput" data-i18n="nameLabel">密钥名称</label>
+          <input id="nameInput" type="text" maxlength="120" autocomplete="off" required data-i18n-placeholder="namePlaceholder" placeholder="例如：生产环境客户端" />
+          <span class="field-hint" data-i18n="nameHint">名称用于区分调用方，不会发送给下游。</span>
+        </div>
+      </div>
+      <div class="dialog-foot"><span class="form-message" id="formMessage" role="alert"></span><div class="dialog-actions"><button type="button" class="btn" id="nameCancel" data-i18n="cancel">取消</button><button type="submit" class="btn btn-primary" id="nameSave" data-i18n="save">创建</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="secretDialog">
+    <div class="dialog-head"><h2 data-i18n="secretTitle">密钥已创建</h2></div>
+    <div class="dialog-body">
+      <div class="secret-callout">
+        <strong data-i18n="secretOnce">现在复制，关闭后无法再次查看</strong>
+        <p data-i18n="secretHelp">SQLite 只保存密钥 hash。遗失后请删除旧密钥并创建新的密钥。</p>
+        <div class="secret-row"><input class="secret-value" id="secretValue" readonly /><button type="button" class="btn btn-primary" id="copyButton" data-i18n="copy">复制密钥</button></div>
+      </div>
+    </div>
+    <div class="dialog-foot"><div class="dialog-actions"><button type="button" class="btn" id="secretDone" data-i18n="saved">我已保存</button></div></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var keys = [];
+      var stats = { total: 0, enabled: 0, disabled: 0 };
+      var editingID = 0;
+      var locale = 'zh';
+      var theme = 'light';
+      var toastTimer = 0;
+      var localeKey = 'chatgpt_web_voice_ui_locale_v1';
+      var themeKey = 'chatgpt_web_voice_theme_v1';
+
+      var I18N = {
+        zh: {
+          pageTitle: 'API 密钥 · Voice Gateway', brandTitle: 'API 密钥', accounts: '账号池', voice: '语音通话', logout: '退出',
+          title: '下游访问密钥', create: '创建密钥', noteTitle: '完整密钥只显示一次', noteText: '创建后立即复制并保存在下游后端。密钥只能调用 /v1 接口，不能读取账号池。',
+          total: '全部', enabled: '启用', disabled: '禁用', search: '搜索名称或密钥前缀…', refresh: '刷新',
+          columnName: '名称', columnPrefix: '密钥前缀', columnStatus: '状态', columnLastUsed: '最近使用', columnCreated: '创建时间', columnActions: '操作',
+          statusEnabled: '已启用', statusDisabled: '已禁用', never: '从未使用', edit: '重命名', disable: '禁用', enable: '启用', delete: '删除',
+          emptyTitle: '还没有 API 密钥', emptyText: '创建密钥后，下游后端即可通过 /v1 建立语音连接。', noResults: '没有匹配的密钥', noResultsText: '换个名称或前缀试试。',
+          createTitle: '创建 API 密钥', editTitle: '重命名 API 密钥', nameLabel: '密钥名称', namePlaceholder: '例如：生产环境客户端', nameHint: '名称用于区分调用方，不会发送给下游。',
+          cancel: '取消', save: '创建', saveRename: '保存', nameRequired: '请输入密钥名称', saving: '正在保存…', created: 'API 密钥已创建', renamed: '密钥名称已更新',
+          secretTitle: '密钥已创建', secretOnce: '现在复制，关闭后无法再次查看', secretHelp: 'SQLite 只保存密钥 hash。遗失后请删除旧密钥并创建新的密钥。', copy: '复制密钥', copied: '密钥已复制', copyFailed: '无法复制密钥', saved: '我已保存',
+          enabledToast: '密钥已启用', disabledToast: '密钥已禁用', deleted: '密钥已删除', confirmDelete: '确认删除密钥“{name}”？下游将立即无法再创建新连接。',
+          loadFailed: '无法加载 API 密钥', operationFailed: '操作失败', sessionExpired: '登录已失效', themeLight: '浅色', themeDark: '深色'
+        },
+        en: {
+          pageTitle: 'API Keys · Voice Gateway', brandTitle: 'API Keys', accounts: 'Accounts', voice: 'Voice', logout: 'Log out',
+          title: 'Downstream access keys', create: 'Create key', noteTitle: 'The full key is shown once', noteText: 'Copy it now and store it in the downstream backend. Keys can call /v1 only and cannot read the account pool.',
+          total: 'Total', enabled: 'Enabled', disabled: 'Disabled', search: 'Search name or key prefix…', refresh: 'Refresh',
+          columnName: 'Name', columnPrefix: 'Key prefix', columnStatus: 'Status', columnLastUsed: 'Last used', columnCreated: 'Created', columnActions: 'Actions',
+          statusEnabled: 'Enabled', statusDisabled: 'Disabled', never: 'Never', edit: 'Rename', disable: 'Disable', enable: 'Enable', delete: 'Delete',
+          emptyTitle: 'No API keys yet', emptyText: 'Create a key so a downstream backend can establish voice connections through /v1.', noResults: 'No matching keys', noResultsText: 'Try another name or prefix.',
+          createTitle: 'Create API key', editTitle: 'Rename API key', nameLabel: 'Key name', namePlaceholder: 'e.g. Production client', nameHint: 'The name identifies the caller and is never sent downstream.',
+          cancel: 'Cancel', save: 'Create', saveRename: 'Save', nameRequired: 'Enter a key name', saving: 'Saving…', created: 'API key created', renamed: 'Key name updated',
+          secretTitle: 'API key created', secretOnce: 'Copy it now — it cannot be viewed again', secretHelp: 'SQLite stores only the key hash. If it is lost, delete the old key and create a new one.', copy: 'Copy key', copied: 'Key copied', copyFailed: 'Could not copy key', saved: 'I saved it',
+          enabledToast: 'Key enabled', disabledToast: 'Key disabled', deleted: 'Key deleted', confirmDelete: 'Delete key “{name}”? The downstream caller will immediately lose access to new connections.',
+          loadFailed: 'Could not load API keys', operationFailed: 'Operation failed', sessionExpired: 'Login expired', themeLight: 'Light', themeDark: 'Dark'
+        }
+      };
+
+      var rows = document.getElementById('keyRows');
+      var tableWrap = document.getElementById('tableWrap');
+      var emptyState = document.getElementById('emptyState');
+      var searchInput = document.getElementById('searchInput');
+      var nameDialog = document.getElementById('nameDialog');
+      var nameForm = document.getElementById('nameForm');
+      var nameInput = document.getElementById('nameInput');
+      var formMessage = document.getElementById('formMessage');
+      var secretDialog = document.getElementById('secretDialog');
+      var secretValue = document.getElementById('secretValue');
+
+      function t(key, vars) {
+        var table = I18N[locale] || I18N.zh;
+        var value = table[key] || I18N.zh[key] || key;
+        if (vars) Object.keys(vars).forEach(function (name) { value = String(value).split('{' + name + '}').join(String(vars[name])); });
+        return value;
+      }
+
+      function escapeHTML(value) {
+        return String(value == null ? '' : value).replace(/[&<>'"]/g, function (char) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char];
+        });
+      }
+
+      function applyLocale() {
+        document.documentElement.lang = locale === 'en' ? 'en' : 'zh-CN';
+        document.title = t('pageTitle');
+        document.querySelectorAll('[data-i18n]').forEach(function (node) { node.textContent = t(node.getAttribute('data-i18n')); });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(function (node) { node.setAttribute('placeholder', t(node.getAttribute('data-i18n-placeholder'))); });
+        document.getElementById('localeButton').textContent = locale === 'en' ? 'EN' : '中文';
+        document.getElementById('themeButton').textContent = theme === 'dark' ? t('themeDark') : t('themeLight');
+        render();
+      }
+
+      function setTheme(next) {
+        theme = next === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        try { localStorage.setItem(themeKey, theme); } catch (e) {}
+        document.getElementById('themeButton').textContent = theme === 'dark' ? t('themeDark') : t('themeLight');
+      }
+
+      function showToast(message) {
+        var toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2800);
+      }
+
+      async function apiFetch(path, options) {
+        var response = await fetch(path, Object.assign({ credentials: 'same-origin' }, options || {}));
+        var data = null;
+        try { data = await response.json(); } catch (e) {}
+        if (response.status === 401) {
+          window.location.replace('/login');
+          throw new Error(t('sessionExpired'));
+        }
+        if (!response.ok) {
+          var message = data && data.detail && data.detail.error;
+          if (!message && data && data.error) message = data.error.message || data.error;
+          throw new Error(message || ('HTTP ' + response.status));
+        }
+        return data || {};
+      }
+
+      function formatDate(value) {
+        if (!value) return t('never');
+        var date = new Date(String(value).replace(' ', 'T') + (String(value).indexOf('Z') >= 0 ? '' : 'Z'));
+        if (Number.isNaN(date.getTime())) return String(value);
+        return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+      }
+
+      function renderRow(key) {
+        var state = key.enabled ? 'enabled' : 'disabled';
+        return '<tr class="' + (key.enabled ? '' : 'disabled') + '" data-id="' + key.id + '">' +
+          '<td data-label="' + escapeHTML(t('columnName')) + '"><div class="cell-stack"><span class="cell-title" title="' + escapeHTML(key.name) + '">' + escapeHTML(key.name) + '</span><span class="cell-meta mono">ID ' + key.id + '</span></div></td>' +
+          '<td data-label="' + escapeHTML(t('columnPrefix')) + '"><span class="prefix mono" title="' + escapeHTML(key.prefix) + '">' + escapeHTML(key.prefix) + '…</span></td>' +
+          '<td data-label="' + escapeHTML(t('columnStatus')) + '"><span class="badge ' + (key.enabled ? '' : 'disabled') + '">' + escapeHTML(t(key.enabled ? 'statusEnabled' : 'statusDisabled')) + '</span></td>' +
+          '<td data-label="' + escapeHTML(t('columnLastUsed')) + '"><span class="cell-meta">' + escapeHTML(formatDate(key.last_used_at)) + '</span></td>' +
+          '<td data-label="' + escapeHTML(t('columnCreated')) + '"><span class="cell-meta">' + escapeHTML(formatDate(key.created_at)) + '</span></td>' +
+          '<td data-label="' + escapeHTML(t('columnActions')) + '"><div class="actions">' +
+            '<button type="button" class="btn btn-small" data-action="edit" data-id="' + key.id + '">' + escapeHTML(t('edit')) + '</button>' +
+            '<button type="button" class="btn btn-small" data-action="toggle" data-id="' + key.id + '">' + escapeHTML(t(key.enabled ? 'disable' : 'enable')) + '</button>' +
+            '<button type="button" class="btn btn-small btn-danger" data-action="delete" data-id="' + key.id + '">' + escapeHTML(t('delete')) + '</button>' +
+          '</div></td></tr>';
+      }
+
+      function render() {
+        document.getElementById('totalCount').textContent = stats.total || 0;
+        document.getElementById('enabledCount').textContent = stats.enabled || 0;
+        document.getElementById('disabledCount').textContent = stats.disabled || 0;
+        var query = searchInput.value.trim().toLowerCase();
+        var filtered = keys.filter(function (key) { return !query || (key.name + ' ' + key.prefix).toLowerCase().indexOf(query) >= 0; });
+        rows.innerHTML = filtered.map(renderRow).join('');
+        tableWrap.style.display = filtered.length ? 'block' : 'none';
+        emptyState.classList.toggle('show', !filtered.length);
+        document.getElementById('emptyTitle').textContent = keys.length ? t('noResults') : t('emptyTitle');
+        document.getElementById('emptyText').textContent = keys.length ? t('noResultsText') : t('emptyText');
+      }
+
+      async function loadKeys(showMessage) {
+        try {
+          var data = await apiFetch('/api/keys');
+          keys = Array.isArray(data.keys) ? data.keys : [];
+          stats = data.stats || { total: keys.length, enabled: 0, disabled: 0 };
+          render();
+          if (showMessage) showToast(t('refresh'));
+        } catch (error) {
+          showToast(t('loadFailed') + ': ' + error.message);
+        }
+      }
+
+      function openNameDialog(key) {
+        editingID = key ? Number(key.id) : 0;
+        nameInput.value = key ? key.name : '';
+        formMessage.textContent = '';
+        document.getElementById('nameDialogTitle').textContent = t(editingID ? 'editTitle' : 'createTitle');
+        document.getElementById('nameSave').textContent = t(editingID ? 'saveRename' : 'save');
+        nameDialog.showModal();
+        setTimeout(function () { nameInput.focus(); nameInput.select(); }, 0);
+      }
+
+      async function copySecret() {
+        var value = secretValue.value;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(value);
+          else {
+            secretValue.focus(); secretValue.select();
+            if (!document.execCommand('copy')) throw new Error('copy unavailable');
+          }
+          showToast(t('copied'));
+        } catch (error) {
+          showToast(t('copyFailed'));
+        }
+      }
+
+      nameForm.onsubmit = async function (event) {
+        event.preventDefault();
+        var name = nameInput.value.trim();
+        if (!name) { formMessage.textContent = t('nameRequired'); nameInput.focus(); return; }
+        var save = document.getElementById('nameSave');
+        save.disabled = true;
+        formMessage.textContent = t('saving');
+        try {
+          if (editingID) {
+            await apiFetch('/api/keys/' + editingID, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name }) });
+            nameDialog.close();
+            showToast(t('renamed'));
+          } else {
+            var created = await apiFetch('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name }) });
+            nameDialog.close();
+            secretValue.value = created.secret || '';
+            secretDialog.showModal();
+            secretValue.focus(); secretValue.select();
+            showToast(t('created'));
+          }
+          await loadKeys(false);
+        } catch (error) {
+          formMessage.textContent = error.message || t('operationFailed');
+        } finally {
+          save.disabled = false;
+        }
+      };
+
+      rows.onclick = async function (event) {
+        var button = event.target.closest('button[data-action]');
+        if (!button) return;
+        var id = Number(button.getAttribute('data-id'));
+        var key = keys.find(function (item) { return Number(item.id) === id; });
+        if (!key) return;
+        var action = button.getAttribute('data-action');
+        if (action === 'edit') { openNameDialog(key); return; }
+        if (action === 'delete') {
+          if (!window.confirm(t('confirmDelete', { name: key.name }))) return;
+          try { await apiFetch('/api/keys/' + id, { method: 'DELETE' }); showToast(t('deleted')); await loadKeys(false); }
+          catch (error) { showToast(t('operationFailed') + ': ' + error.message); }
+          return;
+        }
+        if (action === 'toggle') {
+          try {
+            await apiFetch('/api/keys/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !key.enabled }) });
+            showToast(t(key.enabled ? 'disabledToast' : 'enabledToast'));
+            await loadKeys(false);
+          } catch (error) { showToast(t('operationFailed') + ': ' + error.message); }
+        }
+      };
+
+      document.getElementById('createButton').onclick = function () { openNameDialog(null); };
+      document.getElementById('refreshButton').onclick = function () { loadKeys(false); };
+      searchInput.oninput = render;
+      document.getElementById('nameDialogClose').onclick = function () { nameDialog.close(); };
+      document.getElementById('nameCancel').onclick = function () { nameDialog.close(); };
+      document.getElementById('copyButton').onclick = copySecret;
+      document.getElementById('secretDone').onclick = function () { secretValue.value = ''; secretDialog.close(); };
+      secretDialog.addEventListener('close', function () { secretValue.value = ''; });
+      secretValue.onclick = function () { secretValue.select(); };
+      document.getElementById('localeButton').onclick = function () {
+        locale = locale === 'zh' ? 'en' : 'zh';
+        try { localStorage.setItem(localeKey, locale); } catch (e) {}
+        applyLocale();
+      };
+      document.getElementById('themeButton').onclick = function () { setTheme(theme === 'dark' ? 'light' : 'dark'); };
+      document.getElementById('logoutButton').onclick = async function () {
+        try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
+        finally { window.location.replace('/login'); }
+      };
+
+      try { locale = localStorage.getItem(localeKey) === 'en' ? 'en' : 'zh'; } catch (e) {}
+      theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+      applyLocale();
+      setTheme(theme);
+      loadKeys(false);
+    })();
+  </script>
+</body>
+</html>

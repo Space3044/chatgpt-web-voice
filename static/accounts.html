@@ -547,6 +547,9 @@
       .dialog-foot { align-items: stretch; flex-direction: column; }
       .dialog-actions { justify-content: flex-end; }
     }
+    @media (max-width: 620px) {
+      .top-actions .nav-link[href="/voice"] { display: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
       .header-toast { transition: none; }
     }
@@ -562,6 +565,7 @@
     <div class="top-actions">
       <button type="button" class="header-chip" id="btnUiLocale" data-i18n-title="localeAria" data-i18n-aria="localeAria" title="语言" aria-label="语言">中文</button>
       <button type="button" class="header-chip" id="btnUiTheme" data-i18n-title="themeAria" data-i18n-aria="themeAria" title="主题" aria-label="主题">浅色</button>
+      <a class="nav-link" href="/keys" data-i18n="apiKeys">API 密钥</a>
       <a class="nav-link" href="/voice" data-i18n="backVoice">语音通话</a>
       <button type="button" class="nav-link" id="logoutButton" data-i18n="logout">退出</button>
     </div>
@@ -694,6 +698,7 @@
         zh: {
           pageTitle: '账号池 · Voice Gateway',
           brandTitle: '账号池',
+          apiKeys: 'API 密钥',
           backVoice: '语音通话',
           logout: '退出',
           title: '账号池',
@@ -785,6 +790,7 @@
         en: {
           pageTitle: 'Account Pool · Voice Gateway',
           brandTitle: 'Accounts',
+          apiKeys: 'API Keys',
           backVoice: 'Voice',
           logout: 'Log out',
           title: 'Accounts',

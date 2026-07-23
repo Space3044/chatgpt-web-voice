@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/dyhhhhhh/chatgpt-web-voice/internal/auth"
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/voice"
 )
 
@@ -43,6 +44,7 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := s.voice.CreateSession(voice.CreateSessionRequest{
+		Owner:          adminVoiceOwner(r),
 		OfferSDP:       body.OfferSDP,
 		Voice:          body.Voice,
 		VoiceMode:      body.VoiceMode,
@@ -77,8 +79,12 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":       true,
-		"released": s.voice.ReleaseSession(sessionID),
+		"released": s.voice.ReleaseSession(adminVoiceOwner(r), sessionID),
 	})
+}
+
+func adminVoiceOwner(r *http.Request) string {
+	return "admin:" + auth.Username(r.Context())
 }
 
 func writeServiceError(w http.ResponseWriter, err error) {
