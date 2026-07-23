@@ -73,12 +73,15 @@ ghcr.io/space3044/chatgpt-web-voice:main
 |---|---|---|
 | `network_mode` | `host` | 共用宿主机网络，出站走宿主机透明代理（如 dae） |
 | 监听 | 宿主机 `8090` | host 网络下不再做端口映射 |
-| `mem_limit` | `128m` | 容器内存上限 128MB |
+| `mem_limit` | `256m` | 容器内存上限（curl-impersonate 子进程略高于纯 Go） |
 | `pull_policy` | `always` | 每次 up 尝试拉取最新镜像 |
+| 上游传输 | `curl-impersonate` | 镜像内置 `curl_edge101`（与 ChatGPT2API-GO 一致） |
 | 数据 | `./data` | SQLite 等 |
 | 日志 | 容器 stdout | `docker compose logs -f` 查看 |
 
-镜像默认 `VOICE_ENV=production`、不在容器内终止 TLS。生产环境可在前面加 Nginx / Caddy / Traefik。请保证 `./data` 可写（进程用户为 uid 1000）。
+镜像默认 `VOICE_ENV=production`、不在容器内终止 TLS，上游默认 `VOICE_UPSTREAM_TRANSPORT=curl-impersonate`（二进制已打进 image，VPS 无需再装）。生产环境可在前面加 Nginx / Caddy / Traefik。请保证 `./data` 可写（进程用户为 uid 1000）。
+
+本地 `go run` 仍默认 `tls-client`；只有 Docker 镜像默认 curl。
 
 ### 启动
 
@@ -112,9 +115,15 @@ docker compose down
 | `VOICE_AUTH_USERNAME` | 管理端登录用户名（必填） |
 | `VOICE_AUTH_PASSWORD` | 管理端登录密码（必填） |
 | `VOICE_TOKEN_ENCRYPTION_KEY` | 密封账号 token 的 32 字节密钥（hex 或 base64，必填）；丢失后已存 token 无法解密 |
+| `VOICE_UPSTREAM_TRANSPORT` | 上游传输：`curl-impersonate`（Docker 默认）/ `tls-client`（本地 go 默认）/ `go` |
+| `VOICE_TLS_PROFILE` | tls-client 指纹档，默认 `chrome_120`（库无 edge 档时的回退） |
+| `VOICE_IMPERSONATE` | curl 配置档；默认 `edge_101`（对齐 ChatGPT2API-GO） |
+| `VOICE_CURL_IMPERSONATE_BIN` | curl 二进制路径；Docker 默认 `/app/bin/curl-impersonate/curl_edge101` |
+| `VOICE_DEVICE_ID` / `VOICE_SESSION_ID` | 进程全局 `oai-device-id` / `oai-session-id`；未设置时启动生成 UUID |
 | `VOICE_LOG_LEVEL` | 可选：`debug` / `info` / `warn` / `error` |
 
-上游代理优先用账号池 per-account proxy；未配置时进程直连，由宿主机透明代理（dae 等）按规则处理。
+上游代理优先用账号池 per-account proxy；未配置时进程直连，由宿主机透明代理（dae 等）按规则处理。  
+浏览器指纹为进程全局。Docker 镜像已捆绑 curl-impersonate，VPS 上 `docker compose pull && up` 即可，无需在宿主机安装 curl。
 
 ## 下游接口
 

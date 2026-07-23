@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Upstream browser fingerprint is process-global (`VOICE_DEVICE_ID` / `VOICE_SESSION_ID` / UA / `Sec-Ch-Ua*`); removed per-account `device_id` from SQLite, APIs, and the accounts panel.
+- Docker image bundles curl-impersonate (`v0.6.1`, amd64/arm64) on Debian glibc and defaults to `curl-impersonate` + `edge_101`; local `go run` still defaults to `tls-client` (`chrome_120`).
+- Upstream browser persona aligned with ChatGPT2API-GO: Edge 143 UA/`Sec-Ch-Ua*` Client Hints, OAI client version/build, Accept-Language, Cache-Control/Pragma/Priority, and header order.
+- Classifies Cloudflare HTML challenge pages on `/realtime/wm` without treating them as invalid tokens.
 - Downstream `/v1` resume is gateway-owned: clients only keep `voice_session_id`; sticky pool account and upstream continuity are restored from `call_sessions` and are no longer returned or accepted on the public session create response.
 - Hangup now releases the gateway in-memory voice binding after persisting sticky `account_id` / upstream ids; the next dial restores continuity from SQLite instead of keeping the binding alive for `VOICE_SESSION_TTL_SECONDS`.
 - Added admin **会话记录** page (`/sessions`) and `call_sessions` metadata store: records who opened a voice session (`admin` vs downstream API key), sticky pool `account_id`, upstream ids, voice options, and active/released status — never chat content. Downstream `/v1` sessions get the same sticky resume via durable metadata after gateway restarts.

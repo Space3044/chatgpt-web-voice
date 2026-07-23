@@ -222,7 +222,7 @@ api_key:<numeric_id>
 
 ```text
 sessionBinding {
-  Owner, AccountID, AccessToken, DeviceID, Proxy,
+  Owner, AccountID, AccessToken, Proxy,
   CreatedAt, UpdatedAt
 }
 ```
@@ -240,7 +240,8 @@ TTL 由 `VOICE_SESSION_TTL_SECONDS` 控制；访问时刷新 `UpdatedAt`，定�
 
 **为何需要绑定**
 
-同一通话重连或二次 SDP 交换时，应尽量固定同一 ChatGPT 账号与 device_id/proxy，减少会话漂移与无谓换号。
+同一通话重连或二次 SDP 交换时，应尽量固定同一 ChatGPT 账号与 proxy，减少会话漂移与无谓换号。
+浏览器指纹（`oai-device-id` / `oai-session-id` / UA / `sec-ch-ua`）为进程全局配置，不按账号存储。
 
 **上游请求形态**
 
@@ -248,8 +249,8 @@ TTL 由 `VOICE_SESSION_TTL_SECONDS` 控制；访问时刷新 `UpdatedAt`，定�
 POST https://chatgpt.com/realtime/wm?dcid=0
 Content-Type: multipart/form-data
 Authorization: Bearer <web access_token>
-oai-device-id / oai-language / oai-client-version / oai-client-build-number
-Origin/Referer/User-Agent 模拟浏览器
+oai-device-id / oai-session-id / oai-language / oai-client-version / oai-client-build-number
+Sec-Ch-Ua* / Sec-Fetch-* / Origin / Referer / User-Agent 模拟浏览器
 
 parts:
   sdp     = offer SDP
@@ -308,7 +309,18 @@ plaintext access_token
 
 Production 强制校验证书；development 才允许 `VOICE_SKIP_SSL_VERIFY`。
 
-说明：Go 标准库 **不能** 完整复刻 Chrome TLS 指纹（curl_cffi 那类 impersonate）；本项目靠浏览器风格 HTTP 头 + 合法 web token 走 Web 路径。
+传输模式（`VOICE_UPSTREAM_TRANSPORT`）：
+
+| 值 | 行为 |
+|---|---|
+| `curl-impersonate` | 子进程 curl-impersonate；**Docker 镜像默认**，二进制 `curl_edge101`（对齐 ChatGPT2API-GO） |
+| `tls-client` | `bogdanfinn/tls-client`，默认 profile `chrome_120`（无 edge 档时与原项目相同回退）；**本地 `go run` 默认** |
+| `go` | stdlib `crypto/tls` 回退；TLS 指纹是 Go |
+
+Docker 镜像基于 Debian（glibc），构建时按 `TARGETARCH` 下载 lwthiker curl-impersonate `v0.6.1` 并打进 image。VPS 只 pull 镜像，不必挂载二进制。
+
+浏览器人设默认对齐 ChatGPT2API-GO：Edge 143 UA / `Sec-Ch-Ua*` 全套 Client Hints、`oai-client-version=prod-be885…`、`build=5955942`。  
+进程全局指纹：`VOICE_DEVICE_ID`、`VOICE_SESSION_ID`；未设置时启动生成 UUID。
 
 ### 6.4 `conversations.Store`：文本与字幕
 
@@ -372,7 +384,7 @@ Production 强制校验证书；development 才允许 `VOICE_SKIP_SSL_VERIFY`。
 |---|---|
 | `access_token` | 密封密文（`enc1....`） |
 | `token_hash` | HMAC 摘要，唯一索引 |
-| `device_id` | 上游 `oai-device-id` |
+| （指纹） | 进程全局，见 `VOICE_DEVICE_ID` / `VOICE_SESSION_ID` |
 | `proxy` | 可选账号级代理 |
 | `disabled` / `status` | 可用性；401 后置禁用 |
 | `last_used_at` | LRU 选号 |
