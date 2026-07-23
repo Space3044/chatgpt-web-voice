@@ -133,7 +133,7 @@ func TestDownstreamConfigAndSessionIsolation(t *testing.T) {
 	if configResp.Code != http.StatusOK || !strings.Contains(configResp.Body.String(), "oai-events") {
 		t.Fatalf("config status=%d body=%s", configResp.Code, configResp.Body.String())
 	}
-	for _, forbidden := range []string{"access_token", "device_id", "proxy", "account_id"} {
+	for _, forbidden := range []string{"access_token", "proxy", "account_id"} {
 		if strings.Contains(configResp.Body.String(), forbidden) {
 			t.Fatalf("config leaked %q: %s", forbidden, configResp.Body.String())
 		}
@@ -162,7 +162,7 @@ func TestDownstreamConfigAndSessionIsolation(t *testing.T) {
 	if _, exists := sessionBody["voice_session_id"]; !exists {
 		t.Fatalf("expected voice_session_id in session response: %s", sessionResp.Body.String())
 	}
-	for _, forbidden := range []string{"account_id", "access_token", "device_id", "proxy", "upstream_conversation_id", "upstream_voice_session_id"} {
+	for _, forbidden := range []string{"account_id", "access_token", "proxy", "upstream_conversation_id", "upstream_voice_session_id"} {
 		if _, exists := sessionBody[forbidden]; exists {
 			t.Fatalf("downstream response exposed %q: %s", forbidden, sessionResp.Body.String())
 		}

@@ -144,13 +144,6 @@
           <div class="form-section-title" data-i18n="sectionRoute">路由</div>
           <div class="field-grid">
             <div class="field full">
-              <label for="deviceIDInput" data-i18n="deviceIdLabel">Device ID</label>
-              <div class="field-control">
-                <input id="deviceIDInput" type="text" maxlength="512" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
-                <button type="button" class="clear-action" id="clearDeviceID" data-i18n="clearDevice" aria-pressed="false">清空</button>
-              </div>
-            </div>
-            <div class="field full">
               <label for="proxyInput" data-i18n="proxyLabel">Proxy</label>
               <div class="field-control">
                 <input id="proxyInput" type="password" maxlength="4096" autocomplete="new-password" placeholder="http://user:pass@host:port" />
@@ -223,11 +216,8 @@
           sectionRoute: '路由',
           emailLabel: '邮箱',
           accessTokenLabel: 'Access token',
-          deviceIdLabel: 'Device ID',
           proxyLabel: 'Proxy',
-          deviceLabel: '设备',
           proxyDirect: '自动（环境代理/直连）',
-          noDevice: '未设置设备',
           accountId: 'ID {id}',
 
           emptyTitle: '暂无账户',
@@ -238,10 +228,8 @@
           statusAvailable: '正常',
           statusDisabled: '禁用',
           clearAccess: '清空',
-          clearDevice: '清空',
           clearProxy: '清空',
           clearAccessDone: '将清空',
-          clearDeviceDone: '将清空',
           clearProxyDone: '将清空',
           cancel: '取消',
           save: '保存账户',
@@ -289,7 +277,7 @@
           total: 'All',
           available: 'Available',
           disabled: 'Disabled',
-          searchPlaceholder: 'Search email, token preview, device ID…',
+          searchPlaceholder: 'Search email, token preview, proxy…',
           refresh: 'Refresh',
           columnAccount: 'Account',
           columnToken: 'Token',
@@ -315,11 +303,8 @@
           sectionRoute: 'Routing',
           emailLabel: 'Email',
           accessTokenLabel: 'Access token',
-          deviceIdLabel: 'Device ID',
           proxyLabel: 'Proxy',
-          deviceLabel: 'Device',
           proxyDirect: 'Auto (env proxy/direct)',
-          noDevice: 'No device',
           accountId: 'ID {id}',
 
           emptyTitle: 'No accounts',
@@ -330,10 +315,8 @@
           statusAvailable: 'Available',
           statusDisabled: 'Disabled',
           clearAccess: 'Clear',
-          clearDevice: 'Clear',
           clearProxy: 'Clear',
           clearAccessDone: 'Will clear',
-          clearDeviceDone: 'Will clear',
           clearProxyDone: 'Will clear',
           cancel: 'Cancel',
           save: 'Save account',
@@ -384,10 +367,8 @@
       var emailInput = document.getElementById('emailInput');
       var statusInput = document.getElementById('statusInput');
       var accessTokenInput = document.getElementById('accessTokenInput');
-      var deviceIDInput = document.getElementById('deviceIDInput');
       var proxyInput = document.getElementById('proxyInput');
       var clearAccessToken = document.getElementById('clearAccessToken');
-      var clearDeviceID = document.getElementById('clearDeviceID');
       var clearProxy = document.getElementById('clearProxy');
       var accessTokenHint = document.getElementById('accessTokenHint');
       var proxyHint = document.getElementById('proxyHint');
@@ -395,7 +376,6 @@
       var saveButton = document.getElementById('saveButton');
       var toastElement = document.getElementById('toast');
       var clearAccessActive = false;
-      var clearDeviceActive = false;
       var clearProxyActive = false;
 
       function t(key, values) {
@@ -415,10 +395,8 @@
 
       function resetClearActions() {
         clearAccessActive = false;
-        clearDeviceActive = false;
         clearProxyActive = false;
         setClearAction(clearAccessToken, false, 'clearAccess', 'clearAccessDone');
-        setClearAction(clearDeviceID, false, 'clearDevice', 'clearDeviceDone');
         setClearAction(clearProxy, false, 'clearProxy', 'clearProxyDone');
       }
 
@@ -479,7 +457,6 @@
         });
         updateLocaleThemeButtons();
         setClearAction(clearAccessToken, clearAccessActive, 'clearAccess', 'clearAccessDone');
-        setClearAction(clearDeviceID, clearDeviceActive, 'clearDevice', 'clearDeviceDone');
         setClearAction(clearProxy, clearProxyActive, 'clearProxy', 'clearProxyDone');
         render();
         if (dialog.open) updateDialogCopy();
@@ -622,7 +599,6 @@
           return [
             account.email,
             account.access_token_preview,
-            account.device_id,
             account.proxy_preview,
             account.status
           ].join(' ').toLowerCase().includes(query);
@@ -643,12 +619,6 @@
         return text.slice(0, 10) + '…' + text.slice(-8);
       }
 
-      function shortDevice(value) {
-        var text = String(value || '').trim();
-        if (!text) return t('noDevice');
-        if (text.length <= 18) return text;
-        return text.slice(0, 8) + '…' + text.slice(-6);
-      }
 
       function shortProxy(value) {
         var text = String(value || '').trim();
@@ -660,7 +630,6 @@
       function renderRow(account) {
         var statusClass = account.available ? '' : 'disabled';
         var tokenPreview = shortToken(account.access_token_preview);
-        var device = shortDevice(account.device_id);
         var route = account.has_proxy ? shortProxy(account.proxy_preview) : t('proxyDirect');
         var expiry = formatExpiry(account);
         return '<tr class="' + statusClass + '" data-id="' + account.id + '">' +
@@ -677,8 +646,7 @@
           '</td>' +
           '<td data-label="' + escapeHTML(t('columnRoute')) + '">' +
             '<div class="cell-stack">' +
-              '<span class="route-chip mono" title="' + escapeHTML(account.device_id || '') + '">' + escapeHTML(device) + '</span>' +
-              '<span class="cell-meta" title="' + escapeHTML(account.proxy_preview || t('proxyDirect')) + '">' + escapeHTML(route) + '</span>' +
+              '<span class="route-chip mono" title="' + escapeHTML(account.proxy_preview || t('proxyDirect')) + '">' + escapeHTML(route) + '</span>' +
             '</div>' +
           '</td>' +
           '<td data-label="' + escapeHTML(t('columnStatus')) + '">' +
@@ -707,7 +675,6 @@
         form.reset();
         emailInput.value = editing ? (account.email || '') : '';
         statusInput.value = editing ? (account.available ? '正常' : '禁用') : '正常';
-        deviceIDInput.value = editing ? (account.device_id || '') : '';
         accessTokenInput.required = !editing;
         resetClearActions();
         formMessage.textContent = '';
@@ -746,7 +713,6 @@
 
       function clearSecretInputs() {
         accessTokenInput.value = '';
-        deviceIDInput.value = '';
         proxyInput.value = '';
         resetClearActions();
       }
@@ -767,7 +733,6 @@
         }
         var payload = {
           email: emailInput.value.trim(),
-          device_id: deviceIDInput.value.trim(),
           status: statusInput.value,
           disabled: statusInput.value === '禁用'
         };
@@ -803,7 +768,6 @@
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               email: account.email,
-              device_id: account.device_id,
               status: enable ? '正常' : '禁用',
               disabled: !enable
             })
@@ -888,14 +852,6 @@
         accessTokenInput,
         'clearAccess',
         'clearAccessDone'
-      );
-      bindClearAction(
-        clearDeviceID,
-        function () { return clearDeviceActive; },
-        function (v) { clearDeviceActive = v; },
-        deviceIDInput,
-        'clearDevice',
-        'clearDeviceDone'
       );
       bindClearAction(
         clearProxy,

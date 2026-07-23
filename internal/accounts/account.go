@@ -3,11 +3,13 @@ package accounts
 // Account is one ChatGPT web access token entry. The access token is sealed
 // with AES-256-GCM before it is written to SQLite; domain code always sees
 // the plaintext form after decryption.
+//
+// Upstream browser fingerprint (device id, session id, UA) is process-global
+// configuration, not per-account state.
 type Account struct {
 	ID          int64   `json:"id,omitempty"`
 	Email       string  `json:"email"`
 	AccessToken string  `json:"access_token"`
-	DeviceID    string  `json:"device_id,omitempty"`
 	Proxy       string  `json:"proxy,omitempty"`
 	Status      string  `json:"status,omitempty"`
 	Disabled    bool    `json:"disabled,omitempty"`
@@ -22,7 +24,6 @@ type Account struct {
 type AccountUpdate struct {
 	Email       string
 	AccessToken *string
-	DeviceID    string
 	Proxy       *string
 	Status      string
 	Disabled    bool

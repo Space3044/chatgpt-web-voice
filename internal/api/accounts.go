@@ -18,7 +18,6 @@ type accountView struct {
 	ID                 int64   `json:"id"`
 	Email              string  `json:"email"`
 	AccessTokenPreview string  `json:"access_token_preview"`
-	DeviceID           string  `json:"device_id"`
 	HasProxy           bool    `json:"has_proxy"`
 	ProxyPreview       string  `json:"proxy_preview"`
 	Status             string  `json:"status"`
@@ -37,7 +36,6 @@ type accountView struct {
 type accountWriteRequest struct {
 	Email       string  `json:"email"`
 	AccessToken *string `json:"access_token"`
-	DeviceID    string  `json:"device_id"`
 	Proxy       *string `json:"proxy"`
 	Status      string  `json:"status"`
 	Disabled    bool    `json:"disabled"`
@@ -77,7 +75,6 @@ func (s *Server) createAccount(w http.ResponseWriter, r *http.Request) {
 	account := accounts.Account{
 		Email:       request.Email,
 		AccessToken: *request.AccessToken,
-		DeviceID:    request.DeviceID,
 		Status:      request.Status,
 		Disabled:    request.Disabled,
 	}
@@ -107,7 +104,6 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
 	updated, err := s.accounts.Update(id, accounts.AccountUpdate{
 		Email:       request.Email,
 		AccessToken: request.AccessToken,
-		DeviceID:    request.DeviceID,
 		Proxy:       request.Proxy,
 		Status:      request.Status,
 		Disabled:    request.Disabled,
@@ -177,16 +173,12 @@ func decodeAccountWriteRequest(w http.ResponseWriter, r *http.Request) (accountW
 		return accountWriteRequest{}, fmt.Errorf("invalid account payload")
 	}
 	request.Email = strings.TrimSpace(request.Email)
-	request.DeviceID = strings.TrimSpace(request.DeviceID)
 	request.Status = strings.TrimSpace(request.Status)
 	if request.Status == "" {
 		request.Status = "正常"
 	}
 	if len(request.Email) > 320 {
 		return accountWriteRequest{}, fmt.Errorf("email is too long")
-	}
-	if len(request.DeviceID) > 512 {
-		return accountWriteRequest{}, fmt.Errorf("device_id is too long")
 	}
 	if len(request.Status) > 64 {
 		return accountWriteRequest{}, fmt.Errorf("status is too long")
@@ -225,7 +217,6 @@ func newAccountView(account accounts.Account) accountView {
 		ID:                 account.ID,
 		Email:              account.Email,
 		AccessTokenPreview: secretPreview(account.AccessToken),
-		DeviceID:           account.DeviceID,
 		HasProxy:           account.Proxy != "",
 		ProxyPreview:       proxyPreview(account.Proxy),
 		Status:             account.Status,

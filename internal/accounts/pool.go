@@ -12,7 +12,7 @@ import (
 )
 
 const accountSelectColumns = `
-	id, email, access_token, token_hash, device_id, proxy, status, disabled, invalid_at,
+	id, email, access_token, token_hash, proxy, status, disabled, invalid_at,
 	COALESCE(last_used_at, ''), created_at, updated_at`
 
 // Pool is the SQLite-backed account repository. Selection and invalidation are
@@ -177,9 +177,9 @@ func (p *Pool) Create(account Account) (Account, error) {
 	}
 	result, err := p.db.Conn().Exec(`
 		INSERT INTO accounts
-			(email, access_token, token_hash, device_id, proxy, status, disabled, invalid_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-		account.Email, stored, hash, account.DeviceID,
+			(email, access_token, token_hash, proxy, status, disabled, invalid_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		account.Email, stored, hash,
 		account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
 	if err != nil {
 		return Account{}, fmt.Errorf("create account: %w", err)
@@ -216,7 +216,6 @@ func (p *Pool) Update(id int64, update AccountUpdate) (Account, error) {
 		return Account{}, fmt.Errorf("%w: access_token already exists", ErrConflict)
 	}
 	current.Email = strings.TrimSpace(update.Email)
-	current.DeviceID = strings.TrimSpace(update.DeviceID)
 	if update.Proxy != nil {
 		current.Proxy = strings.TrimSpace(*update.Proxy)
 	}
@@ -234,10 +233,10 @@ func (p *Pool) Update(id int64, update AccountUpdate) (Account, error) {
 	}
 	_, err = p.db.Conn().Exec(`
 		UPDATE accounts SET
-			email = ?, access_token = ?, token_hash = ?, device_id = ?, proxy = ?,
+			email = ?, access_token = ?, token_hash = ?, proxy = ?,
 			status = ?, disabled = ?, invalid_at = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`,
-		current.Email, stored, hash, current.DeviceID,
+		current.Email, stored, hash,
 		current.Proxy, current.Status, boolInt(current.Disabled), invalidAt, id)
 	if err != nil {
 		return Account{}, fmt.Errorf("update account: %w", err)
@@ -300,10 +299,10 @@ func (p *Pool) Upsert(account Account) error {
 	case errors.Is(err, sql.ErrNoRows):
 		_, err = p.db.Conn().Exec(`
 			INSERT INTO accounts
-				(email, access_token, token_hash, device_id, proxy, status, disabled, invalid_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+				(email, access_token, token_hash, proxy, status, disabled, invalid_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 			account.Email, stored, hash,
-			account.DeviceID, account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
+			account.Proxy, account.Status, boolInt(account.Disabled), account.InvalidAt)
 		if err != nil {
 			return fmt.Errorf("upsert account: %w", err)
 		}
@@ -313,10 +312,10 @@ func (p *Pool) Upsert(account Account) error {
 	default:
 		_, err = p.db.Conn().Exec(`
 			UPDATE accounts SET
-				email = ?, access_token = ?, token_hash = ?, device_id = ?, proxy = ?,
+				email = ?, access_token = ?, token_hash = ?, proxy = ?,
 				status = ?, disabled = ?, invalid_at = ?, updated_at = CURRENT_TIMESTAMP
 			WHERE id = ?`,
-			account.Email, stored, hash, account.DeviceID, account.Proxy,
+			account.Email, stored, hash, account.Proxy,
 			account.Status, boolInt(account.Disabled), account.InvalidAt, existingID)
 		if err != nil {
 			return fmt.Errorf("upsert account: %w", err)
@@ -453,7 +452,7 @@ func (p *Pool) scanAccount(row store.Scanner) (Account, error) {
 	var storedToken, tokenHash string
 	if err := row.Scan(
 		&account.ID, &account.Email, &storedToken, &tokenHash,
-		&account.DeviceID, &account.Proxy, &account.Status, &disabled, &account.InvalidAt,
+		&account.Proxy, &account.Status, &disabled, &account.InvalidAt,
 		&account.LastUsedAt, &account.CreatedAt, &account.UpdatedAt,
 	); err != nil {
 		return Account{}, err
@@ -519,7 +518,6 @@ func (p *Pool) tokenHash(plaintext string) string {
 func normalizeAccount(account Account) Account {
 	account.Email = strings.TrimSpace(account.Email)
 	account.AccessToken = strings.TrimSpace(account.AccessToken)
-	account.DeviceID = strings.TrimSpace(account.DeviceID)
 	account.Proxy = strings.TrimSpace(account.Proxy)
 	account.Status = strings.TrimSpace(account.Status)
 	if account.Status == "" {

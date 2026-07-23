@@ -9,6 +9,7 @@ import (
 
 // ImportJSONFile reads the former accounts.json format for an explicit,
 // one-time migration. The server itself never calls this function.
+// Legacy device_id / oai-device-id fields are ignored; fingerprint is global.
 func ImportJSONFile(path string) ([]Account, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -45,7 +46,6 @@ func ImportJSONFile(path string) ([]Account, error) {
 		account := Account{
 			Email:       stringField(fields, "email"),
 			AccessToken: firstStringField(fields, "access_token", "token"),
-			DeviceID:    firstStringField(fields, "device_id", "oai-device-id"),
 			Proxy:       stringField(fields, "proxy"),
 			Status:      stringField(fields, "status"),
 			Disabled:    boolField(fields, "disabled"),

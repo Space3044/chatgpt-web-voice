@@ -12,7 +12,6 @@ func (db *DB) migrate() error {
 			email TEXT NOT NULL DEFAULT '',
 			access_token TEXT NOT NULL,
 			token_hash TEXT NOT NULL DEFAULT '',
-			device_id TEXT NOT NULL DEFAULT '',
 			proxy TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT '正常',
 			disabled INTEGER NOT NULL DEFAULT 0,
@@ -98,6 +97,10 @@ func (db *DB) migrate() error {
 	// Existing deployments may still have refresh_token from earlier schema.
 	// The gateway never used it; drop the column when present.
 	if err := db.dropColumnIfExists("accounts", "refresh_token"); err != nil {
+		return err
+	}
+	// device_id is process-global fingerprint now; drop per-account column.
+	if err := db.dropColumnIfExists("accounts", "device_id"); err != nil {
 		return err
 	}
 	// access_token is now sealed ciphertext; uniqueness is enforced on token_hash.
@@ -254,7 +257,6 @@ func (db *DB) rebuildAccountsWithoutAccessTokenUnique() error {
 			email TEXT NOT NULL DEFAULT '',
 			access_token TEXT NOT NULL,
 			token_hash TEXT NOT NULL DEFAULT '',
-			device_id TEXT NOT NULL DEFAULT '',
 			proxy TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT '正常',
 			disabled INTEGER NOT NULL DEFAULT 0,
@@ -264,11 +266,11 @@ func (db *DB) rebuildAccountsWithoutAccessTokenUnique() error {
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`INSERT INTO accounts_new (
-			id, email, access_token, token_hash, device_id, proxy, status, disabled,
+			id, email, access_token, token_hash, proxy, status, disabled,
 			invalid_at, last_used_at, created_at, updated_at
 		)
 		SELECT
-			id, email, access_token, COALESCE(token_hash, ''), device_id, proxy, status, disabled,
+			id, email, access_token, COALESCE(token_hash, ''), proxy, status, disabled,
 			invalid_at, last_used_at, created_at, updated_at
 		FROM accounts`,
 		`DROP TABLE accounts`,

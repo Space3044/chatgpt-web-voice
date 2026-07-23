@@ -73,7 +73,6 @@ func TestAccountManagementAPI(t *testing.T) {
 	createResp := performJSONRequest(t, mux, http.MethodPost, "/api/accounts", map[string]any{
 		"email":        "admin@example.com",
 		"access_token": "secret-access-token-123456",
-		"device_id":    "device-1",
 		"proxy":        "http://user:password@127.0.0.1:8080",
 		"status":       "正常",
 		"disabled":     false,
@@ -107,11 +106,10 @@ func TestAccountManagementAPI(t *testing.T) {
 	}
 
 	updateResp := performJSONRequest(t, mux, http.MethodPut, "/api/accounts/"+jsonNumber(createBody.Account.ID), map[string]any{
-		"email":     "updated@example.com",
-		"device_id": "device-2",
-		"proxy":     "",
-		"status":    "禁用",
-		"disabled":  true,
+		"email":    "updated@example.com",
+		"proxy":    "",
+		"status":   "禁用",
+		"disabled": true,
 	})
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("update status=%d body=%s", updateResp.Code, updateResp.Body.String())

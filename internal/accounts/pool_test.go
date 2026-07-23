@@ -181,7 +181,6 @@ func TestSealStoredTokensMigratesLegacyPlaintext(t *testing.T) {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT NOT NULL DEFAULT '',
 			access_token TEXT NOT NULL UNIQUE,
-			device_id TEXT NOT NULL DEFAULT '',
 			proxy TEXT NOT NULL DEFAULT '',
 			status TEXT NOT NULL DEFAULT '正常',
 			disabled INTEGER NOT NULL DEFAULT 0,
@@ -237,7 +236,7 @@ func TestImportLegacyJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "accounts.json")
 	content := `{
 		"accounts": [
-			{"email":"a@x.com","access_token":"t1","device_id":"d1","status":"正常"},
+			{"email":"a@x.com","access_token":"t1","status":"正常"},
 			{"email":"disabled@x.com","token":"t2","status":"禁用","invalid_at":123.5}
 		]
 	}`
@@ -248,7 +247,7 @@ func TestImportLegacyJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 2 || items[0].AccessToken != "t1" || items[0].DeviceID != "d1" || !items[1].Disabled || items[1].InvalidAt != 123.5 {
+	if len(items) != 2 || items[0].AccessToken != "t1" || !items[1].Disabled || items[1].InvalidAt != 123.5 {
 		t.Fatalf("unexpected import: %+v", items)
 	}
 }
@@ -258,7 +257,6 @@ func TestAccountCRUDAndStats(t *testing.T) {
 	created, err := pool.Create(Account{
 		Email:       "admin@example.com",
 		AccessToken: "access-token-123456",
-		DeviceID:    "device-1",
 		Proxy:       "http://user:password@127.0.0.1:8080",
 	})
 	if err != nil {
@@ -281,7 +279,6 @@ func TestAccountCRUDAndStats(t *testing.T) {
 	updated, err := pool.Update(created.ID, AccountUpdate{
 		Email:       "updated@example.com",
 		AccessToken: nil,
-		DeviceID:    "device-2",
 		Proxy:       stringPointer(""),
 		Status:      "禁用",
 		Disabled:    true,
@@ -304,7 +301,6 @@ func TestAccountCRUDAndStats(t *testing.T) {
 	updated, err = pool.Update(created.ID, AccountUpdate{
 		Email:       updated.Email,
 		AccessToken: &replacement,
-		DeviceID:    updated.DeviceID,
 		Status:      "正常",
 		Disabled:    false,
 	})
