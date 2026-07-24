@@ -3730,12 +3730,11 @@
   }
 
   function restoreRemotePlayback() {
-    if (!playbackSuppressed && !speakerMuted) {
-      // Still nudge play/AudioContext in case the element stalled without a suppress latch.
-      if (inCall) ensureRemotePlay();
-      return;
-    }
-    if (playbackSuppressed) playbackSuppressed = false;
+    // Only act when barge-in mute is latched. Remote energy calls
+    // markAssistantSpeaking many times per second; re-entering ensureRemotePlay
+    // / setTargetAtTime on every tick makes AI speech stutter.
+    if (!playbackSuppressed) return;
+    playbackSuppressed = false;
     applyRemoteAudioOutput();
   }
 
@@ -3757,9 +3756,10 @@
     // Assistant audio is active again (DC state or remote energy). End the
     // barge-in mute cycle even if stop_speaking ack never arrived — otherwise
     // playbackSuppressed stays true until the user toggles the speaker.
-    clearInterruptAckWait();
+    // clearInterruptAckWait is cheap; restore only when suppress is latched.
+    if (awaitingInterruptAck) clearInterruptAckWait();
     assistantSpeaking = true;
-    restoreRemotePlayback();
+    if (playbackSuppressed) restoreRemotePlayback();
   }
 
   function markAssistantListening() {
@@ -4556,6 +4556,15 @@
     }
   }
 
+  // Recover playback after tab backgrounding without touching the hot energy path.
+  function onVisibilityPlaybackResume() {
+    if (document.visibilityState !== 'visible' || !inCall || speakerMuted || playbackSuppressed) return;
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(function () {});
+    }
+    ensureRemotePlay();
+  }
+
   async function startCall() {
     if (starting || inCall) return;
     starting = true;
@@ -5103,6 +5112,7 @@
     updateTranscriptMeta();
     window.addEventListener('pagehide', releaseOnPageExit);
     window.addEventListener('beforeunload', releaseOnPageExit);
+    document.addEventListener('visibilitychange', onVisibilityPlaybackResume);
     btnLogout.onclick = async function () {
       try {
         await stopCall(false);
