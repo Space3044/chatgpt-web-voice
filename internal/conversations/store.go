@@ -11,7 +11,9 @@ import (
 	"github.com/dyhhhhhh/chatgpt-web-voice/internal/store"
 )
 
-const conversationSelectColumns = `id, owner, title, preview,
+const conversationSelectColumns = `id, owner, title,
+	COALESCE(title_locked, 0),
+	preview,
 	COALESCE(account_id, 0),
 	COALESCE(upstream_conversation_id, ''),
 	COALESCE(upstream_parent_message_id, ''),
@@ -25,6 +27,9 @@ type Conversation struct {
 	ID                      string    `json:"id"`
 	Owner                   string    `json:"-"`
 	Title                   string    `json:"title"`
+	// TitleLocked is true after the user renames the conversation. Hangup must
+	// not replace a locked title with the upstream chatgpt.com title.
+	TitleLocked             bool      `json:"title_locked"`
 	Preview                 string    `json:"preview"`
 	// AccountID is the sticky pool account used for this conversation's upstream
 	// chatgpt.com thread. 0 means no account has been bound yet.
@@ -124,7 +129,9 @@ func (s *Store) Create(owner, title string) (Conversation, error) {
 }
 
 // UpdateTitle changes the user-visible title of one conversation.
-func (s *Store) UpdateTitle(owner, id, title string) (Conversation, error) {
+// When lock is non-nil, title_locked is set to that value (true = user rename).
+// When lock is nil, title_locked is left unchanged.
+func (s *Store) UpdateTitle(owner, id, title string, lock *bool) (Conversation, error) {
 	owner = normalizeOwner(owner)
 	id = strings.TrimSpace(id)
 	title = strings.TrimSpace(title)
@@ -136,12 +143,27 @@ func (s *Store) UpdateTitle(owner, id, title string) (Conversation, error) {
 	}
 	s.db.Lock()
 	defer s.db.Unlock()
-	result, err := s.db.Conn().Exec(
-		`UPDATE conversations
-		 SET title = ?, updated_at = CURRENT_TIMESTAMP
-		 WHERE id = ? AND owner = ?`,
-		title, id, owner,
-	)
+	var result sql.Result
+	var err error
+	if lock != nil {
+		locked := 0
+		if *lock {
+			locked = 1
+		}
+		result, err = s.db.Conn().Exec(
+			`UPDATE conversations
+			 SET title = ?, title_locked = ?, updated_at = CURRENT_TIMESTAMP
+			 WHERE id = ? AND owner = ?`,
+			title, locked, id, owner,
+		)
+	} else {
+		result, err = s.db.Conn().Exec(
+			`UPDATE conversations
+			 SET title = ?, updated_at = CURRENT_TIMESTAMP
+			 WHERE id = ? AND owner = ?`,
+			title, id, owner,
+		)
+	}
 	if err != nil {
 		return Conversation{}, fmt.Errorf("update conversation title: %w", err)
 	}
@@ -304,9 +326,10 @@ func (s *Store) UpsertMessage(owner, conversationID string, message Message) (Me
 	}
 	titleCandidate := truncateText(message.Content, 120)
 	preview := truncateText(message.Content, 240)
+	// Only fill an empty title when the user has not locked a manual rename.
 	if _, err := s.db.Conn().Exec(`
 		UPDATE conversations SET
-			title = CASE WHEN title = '' THEN ? ELSE title END,
+			title = CASE WHEN title = '' AND COALESCE(title_locked, 0) = 0 THEN ? ELSE title END,
 			preview = ?,
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ? AND owner = ?`, titleCandidate, preview, conversationID, owner); err != nil {
@@ -381,8 +404,9 @@ func (s *Store) getMessageUnlocked(conversationID, clientID string) (Message, er
 
 func scanConversation(row store.Scanner) (Conversation, error) {
 	var conversation Conversation
+	var titleLocked int
 	if err := row.Scan(
-		&conversation.ID, &conversation.Owner, &conversation.Title, &conversation.Preview,
+		&conversation.ID, &conversation.Owner, &conversation.Title, &titleLocked, &conversation.Preview,
 		&conversation.AccountID,
 		&conversation.UpstreamConversationID, &conversation.UpstreamParentMessageID,
 		&conversation.UpstreamVoiceSessionID, &conversation.GatewayVoiceSessionID,
@@ -390,6 +414,7 @@ func scanConversation(row store.Scanner) (Conversation, error) {
 	); err != nil {
 		return Conversation{}, err
 	}
+	conversation.TitleLocked = titleLocked != 0
 	return conversation, nil
 }
 

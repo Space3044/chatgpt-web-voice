@@ -173,15 +173,27 @@ func TestConversationRenameAndDeleteCascade(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	renamed, err := conversations.UpdateTitle("alice", conversation.ID, "Renamed")
+	lock := true
+	renamed, err := conversations.UpdateTitle("alice", conversation.ID, "Renamed", &lock)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if renamed.Title != "Renamed" || renamed.Preview != "this should be deleted" {
 		t.Fatalf("unexpected renamed conversation: %+v", renamed)
 	}
-	if _, err := conversations.UpdateTitle("alice", conversation.ID, " "); err == nil {
+	if !renamed.TitleLocked {
+		t.Fatal("expected title_locked after user rename")
+	}
+	if _, err := conversations.UpdateTitle("alice", conversation.ID, " ", nil); err == nil {
 		t.Fatal("expected empty title to be rejected")
+	}
+	// Auto title (nil lock) must not clear title_locked.
+	auto, err := conversations.UpdateTitle("alice", conversation.ID, "Auto title", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !auto.TitleLocked || auto.Title != "Auto title" {
+		t.Fatalf("auto update should keep lock: %+v", auto)
 	}
 
 	if err := conversations.Delete("bob", conversation.ID); !errors.Is(err, ErrNotFound) {

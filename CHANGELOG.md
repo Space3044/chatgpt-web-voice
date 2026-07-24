@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Voice page titles: first user utterance during a call; fetch chatgpt.com title once on hangup only. Manual renames persist `conversations.title_locked` so hangup never overwrites after refresh.
 - Downstream image upload credentials: `POST /v1/voice/sessions/{id}/uploads` issues a sticky-account Azure SAS ticket for the live `voice_session_id`; clients PUT image bytes directly (never through the gateway). `POST .../uploads/{file_id}/complete` finalizes via chatgpt.com without storing `file_id` or image bytes. Admin mirrors: `/api/voice/session/uploads` and `.../complete`.
 - Voice page: AI playback volume slider (0–300%) with Web Audio `GainNode` software boost, so mobile in-call routes that ignore media volume keys can still be made louder; preference is stored in `localStorage`.
 - Upstream browser fingerprint is process-global (`VOICE_DEVICE_ID` / `VOICE_SESSION_ID` / UA / `Sec-Ch-Ua*`); removed per-account `device_id` from SQLite, APIs, and the accounts panel.

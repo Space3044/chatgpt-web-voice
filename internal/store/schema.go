@@ -36,6 +36,7 @@ func (db *DB) migrate() error {
 			id TEXT PRIMARY KEY,
 			owner TEXT NOT NULL,
 			title TEXT NOT NULL DEFAULT '',
+			title_locked INTEGER NOT NULL DEFAULT 0,
 			preview TEXT NOT NULL DEFAULT '',
 			account_id INTEGER NOT NULL DEFAULT 0,
 			upstream_conversation_id TEXT NOT NULL DEFAULT '',
@@ -147,6 +148,18 @@ func (db *DB) ensureConversationUpstreamColumns() error {
 			`ALTER TABLE conversations ADD COLUMN account_id INTEGER NOT NULL DEFAULT 0`,
 		); err != nil {
 			return fmt.Errorf("add conversations.account_id: %w", err)
+		}
+	}
+	// title_locked: user manually renamed; hangup must not overwrite with upstream title.
+	hasTitleLocked, err := db.hasColumn("conversations", "title_locked")
+	if err != nil {
+		return err
+	}
+	if !hasTitleLocked {
+		if _, err := db.conn.Exec(
+			`ALTER TABLE conversations ADD COLUMN title_locked INTEGER NOT NULL DEFAULT 0`,
+		); err != nil {
+			return fmt.Errorf("add conversations.title_locked: %w", err)
 		}
 	}
 	return nil

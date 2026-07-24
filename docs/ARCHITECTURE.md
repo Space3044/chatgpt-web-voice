@@ -543,8 +543,9 @@ GET chatgpt.com/backend-api/conversation/{upstream_conversation_id}
 
 - 管理面：`GET /api/voice/session/title?voice_session_id=...&upstream_conversation_id=...`
 - 下游：`GET /v1/voice/sessions/{id}/title`
-- 内置页在 DataChannel 学到 `conversation_id` 后自动拉取；用户手动改名后不再覆盖
-- 上游尚未生成标题时返回 `has_title=false`（常见于通话刚开始）
+- 内置页策略：新会话先用**用户第一句话**作本地标题；**每次通话结束（hangup）**都拉一次上游标题（含同会话重连再挂断）
+- 用户手动改名会把 SQLite `conversations.title_locked=1` 持久化；挂断读到 locked 则**不请求**上游标题
+- 上游尚未生成标题时返回 `has_title=false`，此时保留当前本地标题
 
 ## 15. 一句话总结
 

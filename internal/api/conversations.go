@@ -19,6 +19,9 @@ type createConversationRequest struct {
 
 type updateConversationRequest struct {
 	Title                   string  `json:"title"`
+	// TitleLocked, when non-nil, updates whether hangup may overwrite the title.
+	// true = user renamed; hangup skips upstream title fetch.
+	TitleLocked             *bool   `json:"title_locked"`
 	AccountID               *int64  `json:"account_id"`
 	UpstreamConversationID  *string `json:"upstream_conversation_id"`
 	UpstreamParentMessageID *string `json:"upstream_parent_message_id"`
@@ -98,13 +101,27 @@ func (s *Server) updateConversation(w http.ResponseWriter, r *http.Request) {
 		request.UpstreamVoiceSessionID != nil ||
 		request.GatewayVoiceSessionID != nil
 	title := strings.TrimSpace(request.Title)
+	hasTitle := title != "" || request.TitleLocked != nil
 
 	var conversation conversations.Conversation
 	switch {
-	case title != "" && hasUpstream:
-		if conversation, err = s.conversations.UpdateTitle(owner, id, title); err != nil {
-			writeConversationError(w, r, err)
-			return
+	case hasTitle && hasUpstream:
+		if title != "" {
+			if conversation, err = s.conversations.UpdateTitle(owner, id, title, request.TitleLocked); err != nil {
+				writeConversationError(w, r, err)
+				return
+			}
+		} else if request.TitleLocked != nil {
+			// Lock-only update without changing the visible title.
+			current, getErr := s.conversations.Get(owner, id)
+			if getErr != nil {
+				writeConversationError(w, r, getErr)
+				return
+			}
+			if conversation, err = s.conversations.UpdateTitle(owner, id, current.Title, request.TitleLocked); err != nil {
+				writeConversationError(w, r, err)
+				return
+			}
 		}
 		conversation, err = s.conversations.UpdateUpstreamContext(owner, id, conversations.UpstreamContextUpdate{
 			AccountID:               request.AccountID,
@@ -114,7 +131,14 @@ func (s *Server) updateConversation(w http.ResponseWriter, r *http.Request) {
 			GatewayVoiceSessionID:   request.GatewayVoiceSessionID,
 		})
 	case title != "":
-		conversation, err = s.conversations.UpdateTitle(owner, id, title)
+		conversation, err = s.conversations.UpdateTitle(owner, id, title, request.TitleLocked)
+	case request.TitleLocked != nil:
+		current, getErr := s.conversations.Get(owner, id)
+		if getErr != nil {
+			writeConversationError(w, r, getErr)
+			return
+		}
+		conversation, err = s.conversations.UpdateTitle(owner, id, current.Title, request.TitleLocked)
 	case hasUpstream:
 		conversation, err = s.conversations.UpdateUpstreamContext(owner, id, conversations.UpstreamContextUpdate{
 			AccountID:               request.AccountID,

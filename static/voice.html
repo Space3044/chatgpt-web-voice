@@ -1677,10 +1677,10 @@
   var upstreamVoiceSessionId = '';
   var stickyAccountId = 0; // pool account bound to this local conversation
   var upstreamContextPersistTimer = 0;
-  var upstreamTitleFetchTimer = 0;
   var upstreamTitleFetchInFlight = false;
   var upstreamTitleAppliedFor = ''; // conversationId last applied from upstream
-  var upstreamTitleManualLock = false; // user renamed; do not overwrite until new chat
+  // Persisted as conversations.title_locked. Only the rename dialog sets true.
+  var titleLocked = false;
   var dcChannel = null; // WebRTC datachannel: oai-events
   var voiceStorageKey = 'chatgpt_web_voice_voice_v1';
   var languageStorageKey = 'chatgpt_web_voice_language_v1';
@@ -2497,6 +2497,8 @@
       upstreamParentMessageId: String(item.upstream_parent_message_id || item.upstreamParentMessageId || '').trim(),
       upstreamVoiceSessionId: String(item.upstream_voice_session_id || item.upstreamVoiceSessionId || '').trim(),
       gatewayVoiceSessionId: String(item.gateway_voice_session_id || item.gatewayVoiceSessionId || '').trim(),
+      // User renamed: hangup must not overwrite with upstream title.
+      titleLocked: !!(item.title_locked || item.titleLocked),
       messages: messages
     };
   }
@@ -2569,63 +2571,117 @@
       value === String(t('sessionUntitled') || '').trim().toLowerCase();
   }
 
-  function scheduleFetchUpstreamTitle(delayMs) {
-    if (!voiceSessionId || !conversationId) return;
-    if (upstreamTitleManualLock) return;
-    if (upstreamTitleAppliedFor && upstreamTitleAppliedFor === conversationId) return;
-    if (upstreamTitleFetchTimer) clearTimeout(upstreamTitleFetchTimer);
-    upstreamTitleFetchTimer = setTimeout(function () {
-      upstreamTitleFetchTimer = 0;
-      fetchAndApplyUpstreamTitle().catch(function (error) {
-        log('upstream title fetch fail', String(error && error.message || error));
-      });
-    }, typeof delayMs === 'number' ? delayMs : 2500);
+  // Rehydrate continuity ids from the local conversation row when the in-memory
+  // vars were cleared or never updated (e.g. telemetry only updated parent_id).
+  function ensureUpstreamIdsForHangup() {
+    var active = getActiveConversationSession();
+    if (!active) return;
+    if (!conversationId && active.upstreamConversationId) {
+      conversationId = active.upstreamConversationId;
+    }
+    if (!parentMessageId && active.upstreamParentMessageId) {
+      parentMessageId = active.upstreamParentMessageId;
+    }
+    if (!upstreamVoiceSessionId && active.upstreamVoiceSessionId) {
+      upstreamVoiceSessionId = active.upstreamVoiceSessionId;
+    }
+    if (!voiceSessionId && active.gatewayVoiceSessionId) {
+      voiceSessionId = active.gatewayVoiceSessionId;
+    }
+    if (!stickyAccountId && active.accountId) {
+      stickyAccountId = Number(active.accountId) || 0;
+    }
   }
 
+  // Hangup-only upstream title fetch. Every hangup requests once unless the
+  // user renamed (title_locked). Same conversation resume must still re-fetch
+  // so a later official title can replace an earlier empty/first-utterance one.
+  // Gateway may resolve conversation_id from the sticky binding when omitted.
   async function fetchAndApplyUpstreamTitle() {
-    if (upstreamTitleFetchInFlight || upstreamTitleManualLock) return;
-    if (!voiceSessionId || !conversationId || !activeSessionId) return;
-    if (upstreamTitleAppliedFor === conversationId) return;
+    ensureUpstreamIdsForHangup();
+    var active = getActiveConversationSession();
+    if (active && active.titleLocked) titleLocked = true;
+    if (upstreamTitleFetchInFlight) {
+      console.info('[voice] title skip:inFlight');
+      return;
+    }
+    if (titleLocked) {
+      console.info('[voice] title skip:locked (user renamed; persisted)');
+      return;
+    }
+    if (!voiceSessionId || !activeSessionId) {
+      console.info(
+        '[voice] title skip:missing-ids',
+        'vs=' + (voiceSessionId || ''),
+        'active=' + (activeSessionId || ''),
+        'conv=' + (conversationId || '')
+      );
+      return;
+    }
     upstreamTitleFetchInFlight = true;
     try {
-      var query = '/api/voice/session/title?voice_session_id=' + encodeURIComponent(voiceSessionId) +
-        '&upstream_conversation_id=' + encodeURIComponent(conversationId);
+      var query = '/api/voice/session/title?voice_session_id=' + encodeURIComponent(voiceSessionId);
+      if (conversationId) {
+        query += '&upstream_conversation_id=' + encodeURIComponent(conversationId);
+      }
+      console.info(
+        '[voice] title fetch',
+        'vs=' + voiceSessionId,
+        'conv=' + (conversationId || '(binding)')
+      );
       var response = await gatewayFetch(query, { method: 'GET' });
       var data = {};
       try { data = await response.json(); } catch (e) {}
       if (!response.ok) {
-        log('upstream title http', response.status, data && data.detail);
-        // Title may not be ready yet; retry a couple of times while still in-call.
-        if (inCall && (response.status === 404 || response.status === 502 || response.status === 429)) {
-          scheduleFetchUpstreamTitle(8000);
-        }
+        console.info('[voice] title http ' + response.status, data && data.detail);
         return;
       }
       if (!data.has_title || !data.title) {
-        if (inCall) scheduleFetchUpstreamTitle(8000);
+        console.info('[voice] title empty; keep current local title');
         return;
       }
-      await applyUpstreamTitleToActiveSession(String(data.title));
-      upstreamTitleAppliedFor = conversationId;
+      if (data.upstream_conversation_id && !conversationId) {
+        conversationId = String(data.upstream_conversation_id);
+      }
+      // Auto title: keep title_locked=false in SQLite.
+      await renameConversationSession(activeSessionId, String(data.title), false);
+      // Marks hangup-applied title so mid-call first-utterance logic stops
+      // fighting the official title until the next new chat / conversation id.
+      if (conversationId) upstreamTitleAppliedFor = conversationId;
+      console.info('[voice] title applied', data.title);
     } finally {
       upstreamTitleFetchInFlight = false;
     }
   }
 
-  async function applyUpstreamTitleToActiveSession(title) {
-    title = clampText(title, 120);
-    if (!title || !activeSessionId || upstreamTitleManualLock) return;
+  // New chats start untitled; use the first non-empty user utterance as the
+  // temporary local title until hangup replaces it with the upstream title.
+  function maybeApplyFirstUserTitle(content) {
+    if (titleLocked) return Promise.resolve();
+    // After hangup applied an upstream title for this conversation, stop.
+    if (upstreamTitleAppliedFor && conversationId && upstreamTitleAppliedFor === conversationId) {
+      return Promise.resolve();
+    }
     var active = getActiveConversationSession();
-    // Only auto-replace empty / placeholder / first-message auto titles once per upstream conversation.
-    if (active && active.title && !isPlaceholderLocalTitle(active.title) && upstreamTitleAppliedFor === conversationId) {
-      return;
+    if (!active || !activeSessionId) return Promise.resolve();
+    if (active.titleLocked) {
+      titleLocked = true;
+      return Promise.resolve();
     }
-    try {
-      await renameConversationSession(activeSessionId, title);
-      log('upstream title applied', title);
-    } catch (error) {
-      log('apply upstream title fail', String(error && error.message || error));
+    var title = clampText(String(content || '').trim(), 42);
+    if (!title) return Promise.resolve();
+    var current = String(active.title || '').trim();
+    if (current && !isPlaceholderLocalTitle(current)) {
+      // Allow STT deltas to grow/shrink the first-utterance title only.
+      if (current === title) return Promise.resolve();
+      if (!(title.indexOf(current) === 0 || current.indexOf(title) === 0)) return Promise.resolve();
     }
+    // Auto first-utterance title: do not set title_locked.
+    return renameConversationSession(activeSessionId, title, false).then(function () {
+      log('first-utterance title applied', title);
+    }).catch(function (error) {
+      log('first-utterance title fail', String(error && error.message || error));
+    });
   }
 
   async function conversationRequest(path, options) {
@@ -2695,11 +2751,10 @@
     currentSessionHistory = loaded.messages.slice(-maxSessionMessages);
     lastAssistantHistoryAt = 0;
     applyUpstreamContextFromSession(loaded);
-    // Switching sessions: allow auto-title again unless the stored title looks user-set.
-    upstreamTitleManualLock = !!(loaded.title && !isPlaceholderLocalTitle(loaded.title) && loaded.upstreamConversationId);
-    upstreamTitleAppliedFor = (loaded.title && !isPlaceholderLocalTitle(loaded.title) && loaded.upstreamConversationId)
-      ? loaded.upstreamConversationId
-      : '';
+    // Restore persisted rename lock from SQLite (title_locked).
+    titleLocked = !!loaded.titleLocked;
+    // Allow hangup to re-fetch upstream title for unlocked sessions.
+    upstreamTitleAppliedFor = '';
     syncTranscriptFromHistory();
     updateSessionHeader();
     renderSessionList();
@@ -2951,16 +3006,27 @@
     }
   }
 
-  async function renameConversationSession(id, title) {
+  // lockTitle: true = user rename (persist title_locked); false = auto title
+  // (first utterance / hangup upstream); undefined = leave title_locked as-is.
+  async function renameConversationSession(id, title, lockTitle) {
     var session = conversationSessions.find(function (item) { return item.id === id; });
     if (!session) return;
+    var body = { title: title };
+    if (lockTitle === true) body.title_locked = true;
+    if (lockTitle === false) body.title_locked = false;
     var data = await conversationRequest('/api/conversations/' + encodeURIComponent(id), {
       method: 'PATCH',
-      body: JSON.stringify({ title: title })
+      body: JSON.stringify(body)
     });
     var updated = data.conversation || {};
     session.title = clampText(updated.title || title, 120);
     session.preview = clampText(updated.preview || session.preview || '', 240);
+    if (typeof updated.title_locked === 'boolean') {
+      session.titleLocked = updated.title_locked;
+    } else if (lockTitle === true || lockTitle === false) {
+      session.titleLocked = !!lockTitle;
+    }
+    if (id === activeSessionId) titleLocked = !!session.titleLocked;
     session.updatedAt = timestampMillis(updated.updated_at || Date.now());
     conversationSessions.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
     updateSessionHeader();
@@ -3040,8 +3106,7 @@
     upstreamVoiceSessionId = '';
     stickyAccountId = 0;
     upstreamTitleAppliedFor = '';
-    upstreamTitleManualLock = false;
-    if (upstreamTitleFetchTimer) { clearTimeout(upstreamTitleFetchTimer); upstreamTitleFetchTimer = 0; }
+    titleLocked = false;
     var session = await createLocalConversationOnServer('');
     conversationSessions.unshift(session);
     activeSessionId = session.id;
@@ -3104,9 +3169,6 @@
     var active = getActiveConversationSession();
     if (!active) return;
     active.messages = currentSessionHistory.slice(-maxSessionMessages);
-    var firstUser = active.messages.find(function (item) { return item.role === 'user' && String(item.content || '').trim(); });
-    var titleSource = firstUser || active.messages[0];
-    if (!active.title && titleSource) active.title = clampText(titleSource.content, 42);
     var last = active.messages[active.messages.length - 1];
     active.preview = last ? clampText(last.content, 100) : '';
     active.updatedAt = Date.now();
@@ -3280,6 +3342,9 @@
     var items = loadCurrentSessionHistory();
     var now = Date.now();
     var last = items[items.length - 1];
+    var isFirstUser = role === 'user' && !items.some(function (item) {
+      return item && item.role === 'user' && String(item.content || '').trim();
+    });
     if (last && last.role === role && now - Number(last.ts || 0) < 45000) {
       var previous = String(last.content || '');
       if (previous === clean || clean.indexOf(previous) === 0 || previous.indexOf(clean) === 0) {
@@ -3289,6 +3354,12 @@
         saveCurrentSessionHistory(items);
         persistConversationMessage(last);
         recordTranscript(role, last.content);
+        // Growing first user caption (STT deltas) should refresh the temp title.
+        if (role === 'user' && (isFirstUser || items.filter(function (item) {
+          return item && item.role === 'user';
+        }).length === 1)) {
+          maybeApplyFirstUserTitle(last.content);
+        }
         return;
       }
     }
@@ -3302,6 +3373,7 @@
     saveCurrentSessionHistory(items);
     persistConversationMessage(message);
     recordTranscript(role, clean);
+    if (role === 'user' && isFirstUser) maybeApplyFirstUserTitle(clean);
   }
 
   function rememberAssistantText(text) {
@@ -4023,11 +4095,45 @@
     return obj;
   }
 
+  function noteUpstreamIdsFromDcObject(source) {
+    if (!source || typeof source !== 'object') return false;
+    var changed = false;
+    var cid = source.conversation_id || source.conversationId || '';
+    if (typeof cid === 'string') cid = cid.trim();
+    else cid = '';
+    if (cid && cid !== conversationId) {
+      conversationId = cid;
+      upstreamTitleAppliedFor = '';
+      changed = true;
+    }
+    var pid = source.parent_message_id || source.parentMessageId || '';
+    if (typeof pid === 'string') pid = pid.trim();
+    else pid = '';
+    if (pid && pid !== parentMessageId) {
+      parentMessageId = pid;
+      changed = true;
+    }
+    var uvs = source.voice_session_id || source.voiceSessionId || '';
+    if (typeof uvs === 'string') uvs = uvs.trim();
+    else uvs = '';
+    // Upstream voice session is a UUID, not our gateway vs_… handle.
+    if (uvs && uvs.indexOf('vs_') !== 0 && uvs !== upstreamVoiceSessionId) {
+      upstreamVoiceSessionId = uvs;
+      changed = true;
+    }
+    if (changed) schedulePersistUpstreamContext();
+    return changed;
+  }
+
   function handleDcPayload(payload) {
     var obj = unwrapDc(payload);
     if (!obj || typeof obj !== 'object') return;
     var t = String(obj.type || '');
     var p = obj.payload || obj;
+
+    // Learn continuity ids from any DC event shape (top-level or nested payload).
+    noteUpstreamIdsFromDcObject(obj);
+    noteUpstreamIdsFromDcObject(p);
 
     if (t === 'startup_telemetry' || (p && p.type === 'startup_telemetry')) {
       var st = (p && p.type === 'startup_telemetry') ? p : obj;
@@ -4042,10 +4148,8 @@
         upstreamVoiceSessionId = String(st.voice_session_id);
         stChanged = true;
       }
-      if (stChanged) {
-        schedulePersistUpstreamContext();
-        scheduleFetchUpstreamTitle(2000);
-      }
+      // Title is not fetched mid-call; hangup pulls the upstream title once.
+      if (stChanged) schedulePersistUpstreamContext();
       updateComposerState();
     }
     if (t === 'conversation_update' || (p && p.type === 'conversation_update')) {
@@ -4061,23 +4165,15 @@
         cuChanged = true;
       }
       log('conversation_update', conversationId, parentMessageId);
-      if (cuChanged) {
-        schedulePersistUpstreamContext();
-        scheduleFetchUpstreamTitle(2000);
-      }
+      if (cuChanged) schedulePersistUpstreamContext();
       updateComposerState();
     }
-    // Optional: some web paths emit title_generation on text SSE; accept it on DC too if present.
+    // Ignore mid-call title_generation: local title stays first-utterance until hangup.
     if (t === 'title_generation' || (p && p.type === 'title_generation')) {
       var tg = (p && p.type === 'title_generation') ? p : obj;
       if (tg.conversation_id && tg.conversation_id !== conversationId) {
         conversationId = tg.conversation_id;
         schedulePersistUpstreamContext();
-      }
-      if (tg.title) {
-        applyUpstreamTitleToActiveSession(String(tg.title)).then(function () {
-          upstreamTitleAppliedFor = conversationId || upstreamTitleAppliedFor;
-        }).catch(function () {});
       }
     }
     // 语音内旁路：user/assistant 的 chat_message_delta
@@ -4729,10 +4825,17 @@
         remoteAudio.muted = false;
         remoteAudio.volume = Math.min(1, Math.max(0, playbackVolume));
       }
-      // Persist sticky ids, then free the gateway memory binding. Resume uses
-      // SQLite call_sessions / local conversation rows on the next dial.
-      // "New chat" still clears local ids via createConversationSession().
+      // Persist sticky ids, then pull upstream title once if not user-locked.
+      // Local title was the first user utterance during the call.
+      try { ensureUpstreamIdsForHangup(); } catch (e) {}
       try { await persistUpstreamContextNow(); } catch (e) {}
+      try { await fetchAndApplyUpstreamTitle(); } catch (e) {
+        console.info('[voice] title hangup-fail', String(e && e.message || e));
+        log('hangup title fetch fail', String(e && e.message || e));
+      }
+      // Free the gateway memory binding. Resume uses SQLite call_sessions /
+      // local conversation rows on the next dial.
+      // "New chat" still clears local ids via createConversationSession().
       try { await releaseBackendVoiceSession(true); } catch (e) {}
       updateCallControls();
       if (updateText) setUIKey('idle', 'statusReady', 'subReady');
@@ -4870,9 +4973,10 @@
       var submit = renameConversationForm.querySelector('button[type="submit"]');
       if (submit) submit.disabled = true;
       try {
-        await renameConversationSession(id, title);
+        // User rename: persist title_locked=true so hangup never overwrites.
+        await renameConversationSession(id, title, true);
         if (id === activeSessionId) {
-          upstreamTitleManualLock = true;
+          titleLocked = true;
           upstreamTitleAppliedFor = conversationId || upstreamTitleAppliedFor;
         }
         renameConversationDialog.close();
@@ -5016,6 +5120,8 @@
   }
 
   try {
+    // Boot marker: if Console does not show this after hard refresh, the page is cached.
+    console.info('[voice] title-policy-v4 boot (title_locked persisted)');
     bind();
     loadGatewayVoiceConfig().catch(function () {});
   }
