@@ -1755,6 +1755,9 @@
   var autoInterruptStartedAt = 0;
   var autoInterruptCooldownUntil = 0;
   var awaitingInterruptAck = false;
+  var interruptAckTimer = 0;
+  // Local mute of residual AI audio during barge-in. Must never stay latched
+  // across the next assistant turn (toggleSpeaker was an accidental escape hatch).
   var playbackSuppressed = false;
   var pendingVoicePreview = false;
   var suppressPreviewAssistantUntil = 0;
@@ -2602,20 +2605,12 @@
     var active = getActiveConversationSession();
     if (active && active.titleLocked) titleLocked = true;
     if (upstreamTitleFetchInFlight) {
-      console.info('[voice] title skip:inFlight');
       return;
     }
     if (titleLocked) {
-      console.info('[voice] title skip:locked (user renamed; persisted)');
       return;
     }
     if (!voiceSessionId || !activeSessionId) {
-      console.info(
-        '[voice] title skip:missing-ids',
-        'vs=' + (voiceSessionId || ''),
-        'active=' + (activeSessionId || ''),
-        'conv=' + (conversationId || '')
-      );
       return;
     }
     upstreamTitleFetchInFlight = true;
@@ -2624,20 +2619,13 @@
       if (conversationId) {
         query += '&upstream_conversation_id=' + encodeURIComponent(conversationId);
       }
-      console.info(
-        '[voice] title fetch',
-        'vs=' + voiceSessionId,
-        'conv=' + (conversationId || '(binding)')
-      );
       var response = await gatewayFetch(query, { method: 'GET' });
       var data = {};
       try { data = await response.json(); } catch (e) {}
       if (!response.ok) {
-        console.info('[voice] title http ' + response.status, data && data.detail);
         return;
       }
       if (!data.has_title || !data.title) {
-        console.info('[voice] title empty; keep current local title');
         return;
       }
       if (data.upstream_conversation_id && !conversationId) {
@@ -2648,7 +2636,6 @@
       // Marks hangup-applied title so mid-call first-utterance logic stops
       // fighting the official title until the next new chat / conversation id.
       if (conversationId) upstreamTitleAppliedFor = conversationId;
-      console.info('[voice] title applied', data.title);
     } finally {
       upstreamTitleFetchInFlight = false;
     }
@@ -3716,6 +3703,14 @@
     }
   }
 
+  function clearInterruptAckWait() {
+    awaitingInterruptAck = false;
+    if (interruptAckTimer) {
+      clearTimeout(interruptAckTimer);
+      interruptAckTimer = 0;
+    }
+  }
+
   function applyRemoteAudioOutput() {
     if (!remoteAudio) return;
     // 用户关扬声器，或打断时的临时压制：增益归零；无图时再 mute 元素。
@@ -3735,8 +3730,12 @@
   }
 
   function restoreRemotePlayback() {
-    if (!playbackSuppressed) return;
-    playbackSuppressed = false;
+    if (!playbackSuppressed && !speakerMuted) {
+      // Still nudge play/AudioContext in case the element stalled without a suppress latch.
+      if (inCall) ensureRemotePlay();
+      return;
+    }
+    if (playbackSuppressed) playbackSuppressed = false;
     applyRemoteAudioOutput();
   }
 
@@ -3744,14 +3743,21 @@
     if (!inCall) return;
     speakerMuted = !speakerMuted;
     // 手动打开扬声器时，清掉打断留下的临时压制。
-    if (!speakerMuted) playbackSuppressed = false;
+    if (!speakerMuted) {
+      clearInterruptAckWait();
+      playbackSuppressed = false;
+    }
     applyRemoteAudioOutput();
     updateCallControls();
     toast(speakerMuted ? t('toastSpeakerMuted') : t('toastSpeakerUnmuted'));
   }
 
   function markAssistantSpeaking() {
-    if (!inCall || awaitingInterruptAck) return;
+    if (!inCall) return;
+    // Assistant audio is active again (DC state or remote energy). End the
+    // barge-in mute cycle even if stop_speaking ack never arrived — otherwise
+    // playbackSuppressed stays true until the user toggles the speaker.
+    clearInterruptAckWait();
     assistantSpeaking = true;
     restoreRemotePlayback();
   }
@@ -3759,7 +3765,9 @@
   function markAssistantListening() {
     assistantSpeaking = false;
     autoInterruptStartedAt = 0;
-    if (awaitingInterruptAck) awaitingInterruptAck = false;
+    // Interrupt settle window ends on listening/idle. Keep residual AI audio
+    // muted until the next speaking signal; only clear the ack gate here.
+    clearInterruptAckWait();
   }
 
   function interruptAssistant() {
@@ -3770,13 +3778,21 @@
     autoInterruptCooldownUntil = Date.now() + AUTO_INTERRUPT_COOLDOWN_MS;
     remoteSpeakingUntil = 0;
     suppressRemotePlayback();
+    if (interruptAckTimer) clearTimeout(interruptAckTimer);
+    // Upstream may omit listening/speaking state_update after stop_speaking.
+    // Drop the ack gate so remote energy / a later speaking signal can unmute.
+    interruptAckTimer = setTimeout(function () {
+      interruptAckTimer = 0;
+      if (!awaitingInterruptAck) return;
+      awaitingInterruptAck = false;
+    }, Math.max(AUTO_INTERRUPT_COOLDOWN_MS, 2500));
     setUIKey('listening', 'statusListening', 'subInterrupted');
     try {
       sendDcEvent({ type: 'action_request', payload: { action: 'stop_speaking' } });
       log('auto interrupt', 'stop_speaking');
       return true;
     } catch (e) {
-      awaitingInterruptAck = false;
+      clearInterruptAckWait();
       restoreRemotePlayback();
       throw e;
     }
@@ -4444,7 +4460,10 @@
         } else {
           setWaveLevel('remote', rms);
           // Hold remote speaking state through short pauses in the assistant audio.
-          if (inCall && !playbackSuppressed && !speakerMuted && rms > 0.08) {
+          // Allow energy detection even while playback is suppressed, so a new
+          // assistant turn can clear the barge-in mute without toggling speaker.
+          // Still ignore energy during the short stop_speaking settle window.
+          if (inCall && !speakerMuted && !awaitingInterruptAck && rms > 0.08) {
             remoteSpeakingUntil = Date.now() + 900;
             markAssistantSpeaking();
             if (statusText.textContent !== t('statusSpeaking')) setUIKey('speaking', 'statusSpeaking', 'subSpeaking');
@@ -4502,6 +4521,7 @@
       if ((playbackSuppressed || speakerMuted) && !force) return;
       if (force) {
         speakerMuted = false;
+        clearInterruptAckWait();
         playbackSuppressed = false;
         updateCallControls();
       }
@@ -4510,9 +4530,15 @@
         if (!remotePlaybackConnected) {
           remoteAudio.muted = false;
           remoteAudio.volume = Math.min(1, Math.max(0, playbackVolume));
+        } else {
+          // Graph owns audible output; keep element playing so MediaStream stays hot.
+          remoteAudio.muted = false;
+          remoteAudio.volume = 0;
         }
-        var p = remoteAudio.play();
-        if (p && p.then) await p;
+        if (remoteAudio.paused) {
+          var p = remoteAudio.play();
+          if (p && p.then) await p;
+        }
       }
       var stream = remoteStream || remoteAudio.srcObject;
       if (stream) {
@@ -4521,6 +4547,8 @@
       } else {
         applyPlaybackGain();
       }
+      // Mobile browsers suspend AudioContext after backgrounding; resume is cheap.
+      if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
       log('remote playing', !remoteAudio.paused, 'graph=', remotePlaybackConnected, 'gain=', playbackVolume);
     } catch (e) {
       log('play fail', String(e));
@@ -4816,7 +4844,7 @@
       autoInterruptCalibrationEndsAt = 0;
       autoInterruptCalibrationSamples = [];
       autoInterruptAmbientRms = 0;
-      awaitingInterruptAck = false;
+      clearInterruptAckWait();
       playbackSuppressed = false;
       streamingCaptionRole = '';
       streamingCaptionText = '';
@@ -4830,7 +4858,6 @@
       try { ensureUpstreamIdsForHangup(); } catch (e) {}
       try { await persistUpstreamContextNow(); } catch (e) {}
       try { await fetchAndApplyUpstreamTitle(); } catch (e) {
-        console.info('[voice] title hangup-fail', String(e && e.message || e));
         log('hangup title fetch fail', String(e && e.message || e));
       }
       // Free the gateway memory binding. Resume uses SQLite call_sessions /
@@ -5120,8 +5147,6 @@
   }
 
   try {
-    // Boot marker: if Console does not show this after hard refresh, the page is cached.
-    console.info('[voice] title-policy-v4 boot (title_locked persisted)');
     bind();
     loadGatewayVoiceConfig().catch(function () {});
   }
