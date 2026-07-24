@@ -154,10 +154,10 @@ func (s *Server) downstreamSessionTitle(w http.ResponseWriter, r *http.Request) 
 		"has_title", result.HasTitle,
 	)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"voice_session_id":           result.VoiceSessionID,
-		"upstream_conversation_id":   result.UpstreamConversationID,
-		"title":                      result.Title,
-		"has_title":                  result.HasTitle,
+		"voice_session_id":         result.VoiceSessionID,
+		"upstream_conversation_id": result.UpstreamConversationID,
+		"title":                    result.Title,
+		"has_title":                result.HasTitle,
 	})
 }
 
@@ -183,6 +183,111 @@ func (s *Server) downstreamRelease(w http.ResponseWriter, r *http.Request) {
 		"voice_session_id", sessionID,
 	)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "released": true})
+}
+
+// downstreamImageUpload issues a direct Azure SAS credential bound to the live
+// voice session sticky account. The gateway does not receive or store image bytes.
+func (s *Server) downstreamImageUpload(w http.ResponseWriter, r *http.Request) {
+	if s.voice == nil {
+		writeDownstreamError(w, http.StatusServiceUnavailable, "voice_unavailable", "voice service unavailable")
+		return
+	}
+	owner := auth.APIKeyOwner(r.Context())
+	if owner == "" {
+		writeDownstreamError(w, http.StatusUnauthorized, "invalid_api_key", "valid Bearer API key required")
+		return
+	}
+	sessionID := strings.TrimSpace(r.PathValue("id"))
+	if sessionID == "" {
+		writeDownstreamError(w, http.StatusBadRequest, "invalid_request", "voice session id is required")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body struct {
+		FileName string `json:"file_name"`
+		FileSize int64  `json:"file_size"`
+		MimeType string `json:"mime_type"`
+		Width    int    `json:"width"`
+		Height   int    `json:"height"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		writeDownstreamError(w, http.StatusBadRequest, "invalid_request", "invalid JSON body")
+		return
+	}
+	result, err := s.voice.CreateImageUploadCredential(owner, sessionID, voice.ImageUploadRequest{
+		FileName: body.FileName,
+		FileSize: body.FileSize,
+		MimeType: body.MimeType,
+		Width:    body.Width,
+		Height:   body.Height,
+	})
+	if err != nil {
+		writeDownstreamServiceError(w, err)
+		return
+	}
+	key, _ := auth.APIKey(r.Context())
+	logging.FromContext(r.Context()).Info(
+		"downstream_image_upload_credential_issued",
+		"api_key_id", key.ID,
+		"voice_session_id", sessionID,
+		"file_id", result.FileID,
+		"file_size", result.FileSize,
+	)
+	// Never include account_id / access_token / proxy.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"voice_session_id": result.VoiceSessionID,
+		"file_id":          result.FileID,
+		"upload_url":       result.UploadURL,
+		"upload_method":    result.UploadMethod,
+		"required_headers": result.RequiredHeaders,
+		"file_name":        result.FileName,
+		"mime_type":        result.MimeType,
+		"file_size":        result.FileSize,
+		"width":            result.Width,
+		"height":           result.Height,
+		"asset_pointer":    result.AssetPointer,
+	})
+}
+
+func (s *Server) downstreamImageUploadComplete(w http.ResponseWriter, r *http.Request) {
+	if s.voice == nil {
+		writeDownstreamError(w, http.StatusServiceUnavailable, "voice_unavailable", "voice service unavailable")
+		return
+	}
+	owner := auth.APIKeyOwner(r.Context())
+	if owner == "" {
+		writeDownstreamError(w, http.StatusUnauthorized, "invalid_api_key", "valid Bearer API key required")
+		return
+	}
+	sessionID := strings.TrimSpace(r.PathValue("id"))
+	fileID := strings.TrimSpace(r.PathValue("file_id"))
+	if sessionID == "" || fileID == "" {
+		writeDownstreamError(w, http.StatusBadRequest, "invalid_request", "voice session id and file id are required")
+		return
+	}
+	// Empty body is allowed; MaxBytesReader still guards oversized payloads.
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	result, err := s.voice.CompleteImageUpload(owner, sessionID, fileID)
+	if err != nil {
+		writeDownstreamServiceError(w, err)
+		return
+	}
+	key, _ := auth.APIKey(r.Context())
+	logging.FromContext(r.Context()).Info(
+		"downstream_image_upload_completed",
+		"api_key_id", key.ID,
+		"voice_session_id", sessionID,
+		"file_id", fileID,
+	)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":               true,
+		"voice_session_id": result.VoiceSessionID,
+		"file_id":          result.FileID,
+		"asset_pointer":    result.AssetPointer,
+		"completed":        result.Completed,
+	})
 }
 
 func writeDownstreamServiceError(w http.ResponseWriter, err error) {

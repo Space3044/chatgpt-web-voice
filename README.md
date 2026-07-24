@@ -67,33 +67,45 @@ go build -buildvcs=false -o bin/server ./cmd/server
 ghcr.io/space3044/chatgpt-web-voice:main
 ```
 
-默认配置要点：
+默认配置要点（`docker-compose.yml`）：
 
 | 项 | 值 | 说明 |
 |---|---|---|
-| `network_mode` | `host` | 共用宿主机网络，出站走宿主机透明代理（如 dae） |
-| 监听 | 宿主机 `8090` | host 网络下不再做端口映射 |
-| `mem_limit` | `256m` | 容器内存上限（curl-impersonate 子进程略高于纯 Go） |
+| `image` | `ghcr.io/space3044/chatgpt-web-voice:main` | 发布镜像 |
 | `pull_policy` | `always` | 每次 up 尝试拉取最新镜像 |
-| 上游传输 | `curl-impersonate` | 镜像内置 `curl_edge101`（与 ChatGPT2API-GO 一致） |
-| 数据 | `./data` | SQLite 等 |
-| 日志 | 容器 stdout | `docker compose logs -f` 查看 |
+| `network_mode` | `host` | 共用宿主机网络，出站走宿主机透明代理（如 dae） |
+| `mem_limit` | `256m` | 容器内存上限（curl-impersonate 子进程略高于纯 Go） |
+| `volumes` | `./data:/app/data` | SQLite 等数据持久化 |
+| `restart` | `unless-stopped` | 异常退出后自动拉起 |
+| `environment` | 见下方示例 | 直接写在 compose 中，不依赖 `.env` |
 
-镜像默认 `VOICE_ENV=production`、不在容器内终止 TLS，上游默认 `VOICE_UPSTREAM_TRANSPORT=curl-impersonate`（二进制已打进 image，VPS 无需再装）。生产环境可在前面加 Nginx / Caddy / Traefik。请保证 `./data` 可写（进程用户为 uid 1000）。
+host 网络下服务监听宿主机 `8090`，不再做端口映射。日志走容器 stdout，用 `docker compose logs -f` 查看。完整变量说明见下方「环境变量」。
 
-本地 `go run` 仍默认 `tls-client`；只有 Docker 镜像默认 curl。
+### `docker-compose.yml` 环境变量配置
 
-### 启动
+```yaml
+# docker-compose.yml 公网部署必填项示例
+environment:
+  VOICE_AUTH_USERNAME: "your-admin"
+  VOICE_AUTH_PASSWORD: "your-long-random-password"
+  VOICE_TOKEN_ENCRYPTION_KEY: "your-openssl-rand-hex-32"
+  VOICE_TLS: "false"
+```
 
 ```bash
-cp .env.example .env
-# 填写 VOICE_AUTH_USERNAME / VOICE_AUTH_PASSWORD / VOICE_TOKEN_ENCRYPTION_KEY
+# 生成密封密钥（只生成一次，后续保持不变）
+openssl rand -hex 32       # 后面填写至 VOICE_TOKEN_ENCRYPTION_KEY
+
+mkdir chatgpt-web-voice
+
 mkdir -p data
-# 若权限报错：chown -R 1000:1000 data
+
+vim docker-compose.yml
+
 docker compose up -d
 ```
 
-启动后访问：`http://127.0.0.1:8090/voice`。
+> 后面添加添加反代，以及避免端口暴露到公网
 
 ### 常用命令
 
@@ -106,24 +118,81 @@ docker compose restart chatgpt-web-voice
 docker compose down
 ```
 
-### 环境变量
+## 环境变量
 
-在 `.env` 中配置（Compose 会读取）：
+多数运行参数已在代码或镜像里内置默认值（路径、会话 TTL、上游传输/指纹、日志格式等），**算固定默认，一般不用写**。  
+这里只列**还需要你填、或仍建议按需改**的变量。
+
+| 场景 | 怎么配 |
+|---|---|
+| 开发环境 | `.env`（可参考 `.env.example`） |
+| 生产环境 | `docker-compose.yml` 的 `environment`（不依赖 `.env`） |
+
+### 必填（开发 / 生产都要）
 
 | 变量 | 说明 |
 |---|---|
-| `VOICE_AUTH_USERNAME` | 管理端登录用户名（必填） |
-| `VOICE_AUTH_PASSWORD` | 管理端登录密码（必填） |
-| `VOICE_TOKEN_ENCRYPTION_KEY` | 密封账号 token 的 32 字节密钥（hex 或 base64，必填）；丢失后已存 token 无法解密 |
-| `VOICE_UPSTREAM_TRANSPORT` | 上游传输：`curl-impersonate`（Docker 默认）/ `tls-client`（本地 go 默认）/ `go` |
-| `VOICE_TLS_PROFILE` | tls-client 指纹档，默认 `chrome_120`（库无 edge 档时的回退） |
-| `VOICE_IMPERSONATE` | curl 配置档；默认 `edge_101`（对齐 ChatGPT2API-GO） |
-| `VOICE_CURL_IMPERSONATE_BIN` | curl 二进制路径；Docker 默认 `/app/bin/curl-impersonate/curl_edge101` |
-| `VOICE_DEVICE_ID` / `VOICE_SESSION_ID` | 进程全局 `oai-device-id` / `oai-session-id`；未设置时启动生成 UUID |
-| `VOICE_LOG_LEVEL` | 可选：`debug` / `info` / `warn` / `error` |
+| `VOICE_AUTH_USERNAME` | 管理端登录用户名 |
+| `VOICE_AUTH_PASSWORD` | 管理端登录密码 |
+| `VOICE_TOKEN_ENCRYPTION_KEY` | 密封账号 token 的 32 字节密钥（hex 或 base64）；丢失后已存 token 无法解密 |
 
-上游代理优先用账号池 per-account proxy；未配置时进程直连，由宿主机透明代理（dae 等）按规则处理。  
-浏览器指纹为进程全局。Docker 镜像已捆绑 curl-impersonate，VPS 上 `docker compose pull && up` 即可，无需在宿主机安装 curl。
+### 开发环境可改
+
+| 变量 | 默认 | 何时改 |
+|---|---|---|
+| `VOICE_LISTEN_ADDR` | `0.0.0.0:8090` | 换本地监听地址/端口 |
+| `VOICE_TLS` | `false` | 本地要进程自签 HTTPS 时改为 `true`（可用 `scripts/dev.sh --tls`） |
+| `VOICE_TLS_CERT` / `VOICE_TLS_KEY` | 空 | 启用进程 TLS 时指定证书 |
+| `VOICE_TLS_CERT_DIR` | `./data/certs` | 自签证书目录 |
+| `VOICE_SKIP_SSL_VERIFY` | `false` | 仅 development 可临时用于上游证书排障 |
+| `VOICE_LOG_LEVEL` | `info` | 需要更详细日志时改为 `debug` |
+| `VOICE_LOG_FORMAT` | `json` | 想看文本日志时改为 `text` |
+| `VOICE_DATA_DIR` | `./data` | 数据目录（证书、运行数据等） |
+| `VOICE_DATABASE_FILE` | `./data/voice.db` | SQLite 文件路径 |
+| `VOICE_STATIC_DIR` | `./static` | 前端静态资源目录（`voice.html` 等） |
+| `VOICE_AUTH_SESSION_TTL_SECONDS` | `43200` | 管理端登录保持时长 |
+| `VOICE_LOGIN_MAX_FAILURES` | `8` | 登录失败锁定阈值 |
+| `VOICE_LOGIN_WINDOW_SECONDS` | `900` | 登录失败统计窗口 |
+| `VOICE_LOGIN_LOCKOUT_SECONDS` | `900` | 登录锁定时长 |
+| `VOICE_SESSION_TTL_SECONDS` | `180` | 语音内存绑定 TTL |
+| `VOICE_MAX_ACCOUNT_ATTEMPTS` | `4` | 单次建连最多尝试账号数 |
+| `VOICE_UPSTREAM_TRANSPORT` | `tls-client` | 可换成 `curl-impersonate` |
+| `VOICE_TLS_PROFILE` | `chrome_120` | 使用 `tls-client` 时换指纹档 |
+| `VOICE_IMPERSONATE` / `VOICE_CURL_IMPERSONATE_BIN` | `edge_101` / 空 | 使用 curl-impersonate 时指定配置档与二进制 |
+
+### 生产环境可改
+
+生产镜像已固定 `VOICE_ENV=production`、上游 `curl-impersonate`、数据路径、会话参数等。  
+`docker-compose.yml` 通常只写：
+
+| 变量 | 示例 | 说明 |
+|---|---|---|
+| `VOICE_AUTH_USERNAME` | `your-admin` | 必填 |
+| `VOICE_AUTH_PASSWORD` | 长随机口令 | 必填 |
+| `VOICE_TOKEN_ENCRYPTION_KEY` | `openssl rand -hex 32` | 必填，且后续保持不变 |
+| `VOICE_TLS` | `false` | 有 Caddy/Nginx 时关闭容器内 TLS |
+
+可选覆盖：
+
+| 变量 | 何时改 |
+|---|---|
+| `VOICE_LOG_LEVEL` | 生产排障时临时 `debug` |
+| `VOICE_LOG_FORMAT` | 需要文本日志时改为 `text` |
+| `VOICE_LISTEN_ADDR` | 极少需要；host 网络下默认 `:8090` |
+| `VOICE_AUTH_SESSION_TTL_SECONDS` | 调整管理端登录保持时长 |
+| `VOICE_SESSION_TTL_SECONDS` | 调整语音内存绑定 TTL |
+| `VOICE_LOGIN_MAX_FAILURES` / `VOICE_LOGIN_WINDOW_SECONDS` / `VOICE_LOGIN_LOCKOUT_SECONDS` | 调整登录锁定策略 |
+| `VOICE_MAX_ACCOUNT_ATTEMPTS` | 调整单次建连尝试账号数 |
+
+### 固定默认（一般不用写）
+
+以下已在代码或镜像内置，**正常部署不必配置**：
+
+- 开发：`VOICE_ENV=development`、本地路径、`tls-client` 等
+- 生产镜像：`VOICE_ENV=production`、`VOICE_DATABASE_FILE=/app/data/voice.db`、`VOICE_STATIC_DIR=/app/static`、`VOICE_UPSTREAM_TRANSPORT=curl-impersonate`、`VOICE_IMPERSONATE=edge_101`、`VOICE_CURL_IMPERSONATE_BIN=.../curl_edge101`、会话/登录默认 TTL、日志默认 `json/info`
+- 浏览器指纹与 OAI client 头：`VOICE_USER_AGENT`、`VOICE_CLIENT_*`、`VOICE_SEC_CH_UA*`、`VOICE_DEVICE_ID`、`VOICE_SESSION_ID`（未设时启动自动生成）
+
+上游代理不是 `VOICE_*`：账号池 `proxy` > `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` > 直连。
 
 ## 下游接口
 
@@ -142,6 +211,8 @@ Authorization: Bearer vgw_live_<密钥>
 | `POST` | `/v1/voice/sessions` | 建立或恢复语音会话（SDP 交换） |
 | `POST` | `/v1/voice/sessions/{voice_session_id}/context` | 上报 DataChannel 学到的上游 id |
 | `GET` | `/v1/voice/sessions/{voice_session_id}/title` | 拉取上游会话标题 |
+| `POST` | `/v1/voice/sessions/{voice_session_id}/uploads` | 申请通话中图片直传凭证（绑定粘性账号） |
+| `POST` | `/v1/voice/sessions/{voice_session_id}/uploads/{file_id}/complete` | 标记直传完成（网关代调上游，不收图） |
 | `DELETE` | `/v1/voice/sessions/{voice_session_id}` | 释放网关内存绑定 |
 
 ### 推荐接入流程
@@ -157,10 +228,18 @@ Authorization: Bearer vgw_live_<密钥>
    学到上游 `conversation_id` 等后，调用  
    `POST /v1/voice/sessions/{voice_session_id}/context` 写入网关。
 
-3. **挂断**  
+3. **通话中发图（可选）**  
+   必须先有**活跃**内存绑定（未 hangup）。  
+   1. `POST .../uploads` 只提交元数据，网关用当前 session 粘性账号向 chatgpt.com 换 `file_id` + Azure SAS `upload_url`；  
+   2. 下游 **PUT 图片字节直传** `upload_url`（不经网关）；  
+   3. `POST .../uploads/{file_id}/complete` 让网关代调上游收尾；  
+   4. 客户端 DataChannel 发 `relay_message`，`asset_pointer: sediment://{file_id}`。  
+   网关**不落库**图片与 `file_id`，也不接收图片字节；token / `account_id` 不下发。
+
+4. **挂断**  
    `DELETE /v1/voice/sessions/{voice_session_id}` 释放内存绑定；SQLite 元数据仍保留。
 
-4. **恢复 / 再拨**  
+5. **恢复 / 再拨**  
    再次 `POST /v1/voice/sessions`，带上**同一个** `voice_session_id` 与新的 `offer_sdp`。  
    网关根据记录自动粘回账号并尽量续上上游会话。
 
@@ -207,12 +286,42 @@ curl -X POST https://voice.example.com/v1/voice/sessions \
 }
 ```
 
+### 通话中图片直传示例
+
+```bash
+# 1) 申请凭证（绑定当前 voice_session 的粘性账号）
+curl -X POST "https://voice.example.com/v1/voice/sessions/$VS_ID/uploads" \
+  -H "Authorization: Bearer $VOICE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_name": "photo.jpg",
+    "file_size": 245760,
+    "mime_type": "image/jpeg",
+    "width": 1024,
+    "height": 768
+  }'
+# → file_id, upload_url, required_headers, asset_pointer
+
+# 2) 图片字节直传 Azure（不经网关）
+curl -X PUT "$UPLOAD_URL" \
+  -H "Content-Type: image/jpeg" \
+  -H "x-ms-blob-type: BlockBlob" \
+  -H "x-ms-version: 2020-04-08" \
+  --data-binary @photo.jpg
+
+# 3) 网关代调上游 complete（仍不收图）
+curl -X POST "https://voice.example.com/v1/voice/sessions/$VS_ID/uploads/$FILE_ID/complete" \
+  -H "Authorization: Bearer $VOICE_API_KEY"
+```
+
+随后客户端在 DataChannel 发送 `image_asset_pointer`（`sediment://{file_id}`）。浏览器直连 Azure 时可能受存储 CORS 限制；下游后端代 PUT 通常无此问题。
+
 ### 责任划分
 
 | 角色 | 负责 |
 |---|---|
-| 下游 | API Key 鉴权请求、WebRTC 媒体、DataChannel、字幕与业务会话内容存储 |
-| 网关 | 鉴权、选号、SDP 代理、粘性账号、上游续聊元数据、会话记录 |
+| 下游 | API Key 鉴权请求、WebRTC 媒体、DataChannel、字幕与业务会话内容存储、图片字节直传 Azure |
+| 网关 | 鉴权、选号、SDP 代理、粘性账号、上游续聊元数据、会话记录、图片上传凭证与 complete（不收图、不落库） |
 | chatgpt.com | 语音推理与远端媒体 |
 
 `voice_session_id` 按 API Key 隔离；未知 id 返回 `404`。上游是否真正 resume 取决于 token 是否有效及 chatgpt.com 是否接受续聊参数（best-effort）。

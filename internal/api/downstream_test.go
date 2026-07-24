@@ -68,6 +68,41 @@ func (s *downstreamVoiceStub) FetchUpstreamTitle(owner, id, conversationID strin
 	}, nil
 }
 
+func (s *downstreamVoiceStub) CreateImageUploadCredential(owner, id string, req voice.ImageUploadRequest) (*voice.ImageUploadCredential, error) {
+	if owner != "api_key:1" || id != "vs_test" {
+		return nil, &voice.ServiceError{Message: "voice session not found", StatusCode: http.StatusNotFound}
+	}
+	return &voice.ImageUploadCredential{
+		VoiceSessionID: id,
+		FileID:         "file-test",
+		UploadURL:      "https://blob.example/upload",
+		UploadMethod:   http.MethodPut,
+		RequiredHeaders: map[string]string{
+			"Content-Type":   req.MimeType,
+			"x-ms-blob-type": "BlockBlob",
+			"x-ms-version":   "2020-04-08",
+		},
+		FileName:     req.FileName,
+		MimeType:     req.MimeType,
+		FileSize:     req.FileSize,
+		Width:        req.Width,
+		Height:       req.Height,
+		AssetPointer: "sediment://file-test",
+	}, nil
+}
+
+func (s *downstreamVoiceStub) CompleteImageUpload(owner, id, fileID string) (*voice.ImageUploadCompleteResult, error) {
+	if owner != "api_key:1" || id != "vs_test" || fileID != "file-test" {
+		return nil, &voice.ServiceError{Message: "voice session not found", StatusCode: http.StatusNotFound}
+	}
+	return &voice.ImageUploadCompleteResult{
+		VoiceSessionID: id,
+		FileID:         fileID,
+		AssetPointer:   "sediment://" + fileID,
+		Completed:      true,
+	}, nil
+}
+
 func (s *downstreamVoiceStub) ProbeAccountToken(int64) (*voice.ProbeResult, error) {
 	return nil, nil
 }
@@ -184,6 +219,36 @@ func TestDownstreamConfigAndSessionIsolation(t *testing.T) {
 		if strings.Contains(titleResp.Body.String(), forbidden) {
 			t.Fatalf("title response leaked %q: %s", forbidden, titleResp.Body.String())
 		}
+	}
+
+	uploadResp := performDownstreamRequest(t, handler, http.MethodPost, "/v1/voice/sessions/vs_test/uploads", secret, map[string]any{
+		"file_name": "photo.png",
+		"file_size": 1234,
+		"mime_type": "image/png",
+		"width":     100,
+		"height":    80,
+	})
+	if uploadResp.Code != http.StatusOK || !strings.Contains(uploadResp.Body.String(), "file-test") {
+		t.Fatalf("upload status=%d body=%s", uploadResp.Code, uploadResp.Body.String())
+	}
+	for _, forbidden := range []string{"access_token", "account_id", "proxy", "token-secret"} {
+		if strings.Contains(uploadResp.Body.String(), forbidden) {
+			t.Fatalf("upload response leaked %q: %s", forbidden, uploadResp.Body.String())
+		}
+	}
+
+	completeResp := performDownstreamRequest(t, handler, http.MethodPost, "/v1/voice/sessions/vs_test/uploads/file-test/complete", secret, map[string]any{})
+	if completeResp.Code != http.StatusOK || !strings.Contains(completeResp.Body.String(), `"completed":true`) {
+		t.Fatalf("complete status=%d body=%s", completeResp.Code, completeResp.Body.String())
+	}
+
+	missingUpload := performDownstreamRequest(t, handler, http.MethodPost, "/v1/voice/sessions/vs_other/uploads", secret, map[string]any{
+		"file_name": "photo.png",
+		"file_size": 10,
+		"mime_type": "image/png",
+	})
+	if missingUpload.Code != http.StatusNotFound {
+		t.Fatalf("missing session upload status=%d body=%s", missingUpload.Code, missingUpload.Body.String())
 	}
 
 	releaseResp := performDownstreamRequest(t, handler, http.MethodDelete, "/v1/voice/sessions/vs_test", secret, nil)

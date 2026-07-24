@@ -47,6 +47,8 @@ type VoiceService interface {
 	ReleaseSession(owner, voiceSessionID string) bool
 	UpdateSessionContext(owner, voiceSessionID string, patch voice.UpstreamContext) (voice.UpstreamContext, error)
 	FetchUpstreamTitle(owner, voiceSessionID, conversationID string) (*voice.UpstreamTitleResult, error)
+	CreateImageUploadCredential(owner, voiceSessionID string, req voice.ImageUploadRequest) (*voice.ImageUploadCredential, error)
+	CompleteImageUpload(owner, voiceSessionID, fileID string) (*voice.ImageUploadCompleteResult, error)
 	ProbeAccountToken(accountID int64) (*voice.ProbeResult, error)
 }
 
@@ -87,6 +89,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/voice/session/release", s.release)
 	mux.HandleFunc("POST /api/voice/session/context", s.sessionContext)
 	mux.HandleFunc("GET /api/voice/session/title", s.sessionTitle)
+	mux.HandleFunc("POST /api/voice/session/uploads", s.sessionImageUpload)
+	mux.HandleFunc("POST /api/voice/session/uploads/{file_id}/complete", s.sessionImageUploadComplete)
 	mux.HandleFunc("GET /api/voice/config", s.voiceConfig)
 	mux.HandleFunc("GET /api/accounts", s.listAccounts)
 	mux.HandleFunc("POST /api/accounts", s.createAccount)
@@ -114,6 +118,8 @@ func (s *Server) RegisterDownstream(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/voice/sessions", s.downstreamSession)
 	mux.HandleFunc("POST /v1/voice/sessions/{id}/context", s.downstreamSessionContext)
 	mux.HandleFunc("GET /v1/voice/sessions/{id}/title", s.downstreamSessionTitle)
+	mux.HandleFunc("POST /v1/voice/sessions/{id}/uploads", s.downstreamImageUpload)
+	mux.HandleFunc("POST /v1/voice/sessions/{id}/uploads/{file_id}/complete", s.downstreamImageUploadComplete)
 	mux.HandleFunc("DELETE /v1/voice/sessions/{id}", s.downstreamRelease)
 }
 

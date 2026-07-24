@@ -99,6 +99,8 @@ type Service struct {
 	settingsUserURL string
 	// conversationURLPrefix overrides the conversation metadata endpoint in tests.
 	conversationURLPrefix string
+	// filesAPIURL overrides POST /backend-api/files in tests (image upload credentials).
+	filesAPIURL string
 
 	mu       sync.Mutex
 	bindings map[string]*sessionBinding

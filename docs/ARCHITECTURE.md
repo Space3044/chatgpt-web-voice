@@ -339,6 +339,8 @@ Docker 镜像基于 Debian（glibc），构建时按 `TARGETARCH` 下载 lwthike
 | `GET /v1/health` | 鉴权健康检查 |
 | `GET /v1/voice/config` | 非机密能力文档（音色、语言、STUN、DataChannel 约定） |
 | `POST /v1/voice/sessions` | offer → answer |
+| `POST /v1/voice/sessions/{id}/uploads` | 用粘性账号申请图片直传 SAS（不收图、不落库） |
+| `POST /v1/voice/sessions/{id}/uploads/{file_id}/complete` | 代调上游 complete（仍不收图） |
 | `DELETE /v1/voice/sessions/{id}` | 释放绑定 |
 
 响应 **绝不** 包含 account id、email、token、proxy、池状态。下游必须自己实现：
