@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Voice page: AI playback volume slider (0–300%) with Web Audio `GainNode` software boost, so mobile in-call routes that ignore media volume keys can still be made louder; preference is stored in `localStorage`.
 - Upstream browser fingerprint is process-global (`VOICE_DEVICE_ID` / `VOICE_SESSION_ID` / UA / `Sec-Ch-Ua*`); removed per-account `device_id` from SQLite, APIs, and the accounts panel.
 - Docker image bundles curl-impersonate (`v0.6.1`, amd64/arm64) on Debian glibc and defaults to `curl-impersonate` + `edge_101`; local `go run` still defaults to `tls-client` (`chrome_120`).
 - Upstream browser persona aligned with ChatGPT2API-GO: Edge 143 UA/`Sec-Ch-Ua*` Client Hints, OAI client version/build, Accept-Language, Cache-Control/Pragma/Priority, and header order.

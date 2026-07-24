@@ -1117,6 +1117,32 @@
       font-weight: 650;
       letter-spacing: .01em;
     }
+    body.app-shell .field-label-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    body.app-shell .field-value {
+      color: var(--app-ink);
+      font-size: 12px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: .01em;
+    }
+    body.app-shell .field-help {
+      margin: 0;
+      color: var(--app-dim);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    body.app-shell .settings-panel input[type="range"] {
+      width: 100%;
+      height: 28px;
+      margin: 0;
+      accent-color: var(--app-green);
+      cursor: pointer;
+    }
     body.app-shell .settings-panel select {
       width: 100%;
       min-height: 42px;
@@ -1467,6 +1493,14 @@
               <span class="field-label" data-i18n="micLabel">麦克风</span>
               <select id="micSelect"><option value="" data-i18n="micPlaceholder">选择麦克风…</option></select>
             </label>
+            <label class="stack-field" for="playbackVolume">
+              <span class="field-label field-label-row">
+                <span data-i18n="playbackVolumeLabel">AI 播放音量</span>
+                <span id="playbackVolumeValue" class="field-value">100%</span>
+              </span>
+              <input id="playbackVolume" type="range" min="0" max="300" step="5" value="100" />
+              <span class="field-help" data-i18n="playbackVolumeHelp">手机通话时音量键常控制「通话音量」，外放仍可能偏小；可把这里调到 100% 以上做软件增益。</span>
+            </label>
           </div>
         </section>
         <section class="settings-section">
@@ -1532,7 +1566,7 @@
       </div>
     </form>
   </dialog>
-  <audio id="remoteAudio" autoplay playsinline></audio>
+  <audio id="remoteAudio" autoplay playsinline webkit-playsinline></audio>
 
 <script>
 (function () {
@@ -1605,6 +1639,8 @@
   var btnCloseSettings = document.getElementById('btnCloseSettings');
   var settingsPanel = document.getElementById('settingsPanel');
   var settingsBackdrop = document.getElementById('settingsBackdrop');
+  var playbackVolumeEl = document.getElementById('playbackVolume');
+  var playbackVolumeValueEl = document.getElementById('playbackVolumeValue');
 
   var pc = null;
   var previewPc = null;
@@ -1617,6 +1653,11 @@
   var audioCtx = null;
   var localAnalyser = null, remoteAnalyser = null;
   var localSource = null, remoteSource = null;
+  // Web Audio graph for remote AI playback (gain boost on mobile call route).
+  var remotePlaybackSource = null;
+  var remotePlaybackGain = null;
+  var remotePlaybackConnected = false;
+  var remoteElementMutedForGraph = false;
   var localRaf = 0, remoteRaf = 0;
   var starting = false;
   var stoppingCall = false;
@@ -1624,6 +1665,11 @@
   var inCall = false;
   var muted = false;
   var speakerMuted = false;
+  // 1.0 = 100%. Values above 1 use GainNode software boost (mobile call volume is often capped).
+  var playbackVolume = 1;
+  var PLAYBACK_VOLUME_MIN = 0;
+  var PLAYBACK_VOLUME_MAX = 3;
+  var playbackVolumeStorageKey = 'chatgpt_web_voice_playback_volume_v1';
   var sending = false;
   var conversationId = '';
   var parentMessageId = '';
@@ -1801,6 +1847,9 @@
       micFallback: '麦克风 {n}',
       micNotRecommended: '（不推荐）',
       micNone: '未找到麦克风',
+      playbackVolumeLabel: 'AI 播放音量',
+      playbackVolumeHelp: '手机通话时音量键常控制「通话音量」，外放仍可能偏小；可把这里调到 100% 以上做软件增益。',
+      toastPlaybackVolume: 'AI 播放音量 {percent}',
       advanced: '高级设置',
       authVerified: '已登录',
       accountPool: '账号池',
@@ -1960,6 +2009,9 @@
       micFallback: 'Microphone {n}',
       micNotRecommended: ' (not recommended)',
       micNone: 'No microphone found',
+      playbackVolumeLabel: 'AI playback volume',
+      playbackVolumeHelp: 'On phones, the side buttons often change in-call volume, so speaker output can stay quiet. Raise this above 100% for software gain.',
+      toastPlaybackVolume: 'AI playback volume {percent}',
       advanced: 'Advanced',
       authVerified: 'Signed in',
       accountPool: 'Accounts',
@@ -2383,6 +2435,7 @@
       );
     }
     btnMute.setAttribute('title', muted ? t('unmute') : t('mute'));
+    updatePlaybackVolumeLabel();
   }
 
   function setUiLocale(locale, announce) {
@@ -3472,17 +3525,140 @@
     sendDcEventTo(dcChannel, eventObj);
   }
 
+  function clampPlaybackVolume(value) {
+    var n = Number(value);
+    if (!isFinite(n)) n = 1;
+    if (n < PLAYBACK_VOLUME_MIN) n = PLAYBACK_VOLUME_MIN;
+    if (n > PLAYBACK_VOLUME_MAX) n = PLAYBACK_VOLUME_MAX;
+    // Keep slider-aligned precision (5% steps → 0.05).
+    return Math.round(n * 20) / 20;
+  }
+
+  function formatPlaybackVolumePercent(value) {
+    return Math.round(clampPlaybackVolume(value) * 100) + '%';
+  }
+
+  function loadPlaybackVolume() {
+    var saved = 1;
+    try {
+      var raw = localStorage.getItem(playbackVolumeStorageKey);
+      if (raw != null && raw !== '') saved = Number(raw);
+    } catch (e) {}
+    playbackVolume = clampPlaybackVolume(saved);
+    if (playbackVolumeEl) playbackVolumeEl.value = String(Math.round(playbackVolume * 100));
+    updatePlaybackVolumeLabel();
+  }
+
+  function persistPlaybackVolume() {
+    try { localStorage.setItem(playbackVolumeStorageKey, String(playbackVolume)); } catch (e) {}
+  }
+
+  function updatePlaybackVolumeLabel() {
+    if (playbackVolumeValueEl) playbackVolumeValueEl.textContent = formatPlaybackVolumePercent(playbackVolume);
+  }
+
+  function setPlaybackVolume(value, options) {
+    options = options || {};
+    playbackVolume = clampPlaybackVolume(value);
+    if (playbackVolumeEl && document.activeElement !== playbackVolumeEl) {
+      playbackVolumeEl.value = String(Math.round(playbackVolume * 100));
+    }
+    updatePlaybackVolumeLabel();
+    applyPlaybackGain();
+    if (options.persist !== false) persistPlaybackVolume();
+    if (options.announce) toast(t('toastPlaybackVolume', { percent: formatPlaybackVolumePercent(playbackVolume) }));
+  }
+
+  function effectivePlaybackGain() {
+    if (!inCall || speakerMuted || playbackSuppressed) return 0;
+    return playbackVolume;
+  }
+
+  function disconnectRemotePlaybackGraph() {
+    if (remotePlaybackSource) {
+      try { remotePlaybackSource.disconnect(); } catch (e) {}
+      remotePlaybackSource = null;
+    }
+    if (remotePlaybackGain) {
+      try { remotePlaybackGain.disconnect(); } catch (e) {}
+      remotePlaybackGain = null;
+    }
+    remotePlaybackConnected = false;
+    remoteElementMutedForGraph = false;
+  }
+
+  function applyPlaybackGain() {
+    var gain = effectivePlaybackGain();
+    if (remotePlaybackGain) {
+      try {
+        if (audioCtx) {
+          remotePlaybackGain.gain.setTargetAtTime(gain, audioCtx.currentTime, 0.015);
+        } else {
+          remotePlaybackGain.gain.value = gain;
+        }
+      } catch (e) {
+        try { remotePlaybackGain.gain.value = gain; } catch (e2) {}
+      }
+    }
+    if (remoteAudio) {
+      // Graph owns audible output: keep <audio> playing but silent so the MediaStream stays hot
+      // without double-play. Prefer volume=0 over muted — some mobile browsers stop feeding
+      // Web Audio when the element is muted.
+      if (remotePlaybackConnected) {
+        remoteAudio.muted = false;
+        remoteAudio.volume = 0;
+        remoteElementMutedForGraph = true;
+      } else {
+        remoteAudio.muted = !inCall || speakerMuted || playbackSuppressed;
+        remoteAudio.volume = remoteAudio.muted ? 0 : Math.min(1, Math.max(0, playbackVolume));
+        remoteElementMutedForGraph = false;
+      }
+    }
+  }
+
+  async function ensureRemotePlaybackGraph(stream) {
+    if (!stream) return false;
+    await ensureCtx();
+    if (!audioCtx) return false;
+    // Rebuild when the remote MediaStream identity changes.
+    if (remotePlaybackConnected && remotePlaybackSource && remotePlaybackSource.mediaStream === stream) {
+      applyPlaybackGain();
+      return true;
+    }
+    disconnectRemotePlaybackGraph();
+    try {
+      remotePlaybackSource = audioCtx.createMediaStreamSource(stream);
+      remotePlaybackGain = audioCtx.createGain();
+      remotePlaybackGain.gain.value = effectivePlaybackGain();
+      remotePlaybackSource.connect(remotePlaybackGain);
+      remotePlaybackGain.connect(audioCtx.destination);
+      remotePlaybackConnected = true;
+      applyPlaybackGain();
+      log('remote playback graph', 'gain=' + remotePlaybackGain.gain.value);
+      return true;
+    } catch (e) {
+      log('remote playback graph fail', String(e));
+      disconnectRemotePlaybackGraph();
+      applyPlaybackGain();
+      return false;
+    }
+  }
+
   function applyRemoteAudioOutput() {
     if (!remoteAudio) return;
-    // 用户关扬声器，或打断时的临时压制，都静音远端音频元素。
+    // 用户关扬声器，或打断时的临时压制：增益归零；无图时再 mute 元素。
+    applyPlaybackGain();
     var silent = !inCall || speakerMuted || playbackSuppressed;
-    remoteAudio.muted = silent;
     if (!silent) ensureRemotePlay();
   }
 
   function suppressRemotePlayback() {
     playbackSuppressed = true;
-    try { remoteAudio.pause(); } catch (e) {}
+    applyPlaybackGain();
+    // Keep the element playing so Web Audio gain can unmute instantly on restore.
+    if (!remotePlaybackConnected) {
+      try { remoteAudio.pause(); } catch (e) {}
+    }
     applyRemoteAudioOutput();
   }
 
@@ -4083,9 +4259,32 @@
   async function ensureCtx() {
     if (!audioCtx) {
       var AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) audioCtx = new AC();
+      if (AC) {
+        try {
+          // Prefer low-latency when available (helps mobile WebRTC playback feel responsive).
+          audioCtx = new AC({ latencyHint: 'interactive' });
+        } catch (e) {
+          audioCtx = new AC();
+        }
+      }
     }
     if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+  }
+
+  function preferSpeakerOutput() {
+    // Best-effort: some Chromium mobile builds expose audioSession.type.
+    // 'playback' routes toward media/speaker instead of earpiece call route when supported.
+    try {
+      if (navigator.audioSession) {
+        if ('type' in navigator.audioSession) navigator.audioSession.type = 'playback';
+      }
+    } catch (e) {}
+    try {
+      if (remoteAudio && typeof remoteAudio.setSinkId === 'function') {
+        // Empty string = default system output (cannot force loudspeaker on most phones).
+        remoteAudio.setSinkId('').catch(function () {});
+      }
+    } catch (e) {}
   }
 
   function initWaveBars() {
@@ -4202,18 +4401,31 @@
   async function ensureRemotePlay(force) {
     try {
       await ensureCtx();
-      if (!remoteAudio.srcObject) return;
+      preferSpeakerOutput();
+      if (!remoteAudio.srcObject && !remoteStream) return;
       if ((playbackSuppressed || speakerMuted) && !force) return;
       if (force) {
         speakerMuted = false;
         playbackSuppressed = false;
         updateCallControls();
       }
-      remoteAudio.muted = false;
-      remoteAudio.volume = 1;
-      var p = remoteAudio.play();
-      if (p && p.then) await p;
-      log('remote playing', !remoteAudio.paused);
+      // Start the <audio> element first (iOS/Safari often needs this before Web Audio taps the stream).
+      if (remoteAudio.srcObject) {
+        if (!remotePlaybackConnected) {
+          remoteAudio.muted = false;
+          remoteAudio.volume = Math.min(1, Math.max(0, playbackVolume));
+        }
+        var p = remoteAudio.play();
+        if (p && p.then) await p;
+      }
+      var stream = remoteStream || remoteAudio.srcObject;
+      if (stream) {
+        // Prefer Web Audio gain path so volume can exceed 100% on quiet mobile call routes.
+        await ensureRemotePlaybackGraph(stream);
+      } else {
+        applyPlaybackGain();
+      }
+      log('remote playing', !remoteAudio.paused, 'graph=', remotePlaybackConnected, 'gain=', playbackVolume);
     } catch (e) {
       log('play fail', String(e));
       toast(t('toastClickSpeaker'));
@@ -4225,6 +4437,9 @@
     starting = true;
     try {
       await stopVoicePreviewOnly();
+      // User gesture: unlock audio and prefer media/playback route when the browser allows it.
+      preferSpeakerOutput();
+      await ensureCtx();
       setUIKey('connecting', 'statusConnecting', 'subMic');
       await stopCall(false);
       await prepareCallSession();
@@ -4301,6 +4516,7 @@
           remoteStream.addTrack(ev.track);
         }
         remoteAudio.srcObject = remoteStream;
+        preferSpeakerOutput();
         ensureRemotePlay();
         startMeter(remoteStream, 'remote');
       };
@@ -4487,6 +4703,7 @@
         localStream = null;
       }
       remoteStream = null;
+      disconnectRemotePlaybackGraph();
       remoteAudio.srcObject = null;
       setWaveLevel('local', 0);
       setWaveLevel('remote', 0);
@@ -4508,7 +4725,10 @@
       streamingCaptionRole = '';
       streamingCaptionText = '';
       streamingCaptionMessageId = '';
-      if (remoteAudio) remoteAudio.muted = false;
+      if (remoteAudio) {
+        remoteAudio.muted = false;
+        remoteAudio.volume = Math.min(1, Math.max(0, playbackVolume));
+      }
       // Persist sticky ids, then free the gateway memory binding. Resume uses
       // SQLite call_sessions / local conversation rows on the next dial.
       // "New chat" still clears local ids via createConversationSession().
@@ -4722,6 +4942,17 @@
     };
     btnMute.onclick = toggleMute;
     btnSpeaker.onclick = toggleSpeaker;
+    loadPlaybackVolume();
+    if (playbackVolumeEl) {
+      var onPlaybackVolumeInput = function () {
+        setPlaybackVolume((Number(playbackVolumeEl.value) || 0) / 100, { persist: false, announce: false });
+      };
+      var onPlaybackVolumeCommit = function () {
+        setPlaybackVolume((Number(playbackVolumeEl.value) || 0) / 100, { persist: true, announce: true });
+      };
+      playbackVolumeEl.addEventListener('input', onPlaybackVolumeInput);
+      playbackVolumeEl.addEventListener('change', onPlaybackVolumeCommit);
+    }
     interruptSensitivity.onchange = function () {
       beginAutoInterruptCalibration();
       toast(inCall ? t('toastSensitivityInCall') : t('toastSensitivity'));
