@@ -825,27 +825,40 @@
       background: #d64545;
       box-shadow: 0 6px 16px rgba(196, 51, 51, .22);
     }
-    body.app-shell .btn-main.is-connecting {
+    body.app-shell .btn-main.is-connecting,
+    body.app-shell .btn-main.is-ending {
       width: auto;
       min-width: 46px;
       height: 46px;
       padding: 0 14px;
       border-radius: 999px;
       color: #fff;
-      background: var(--app-green);
-      box-shadow: 0 6px 16px rgba(16,163,127,.16);
       font-size: 12px;
       font-weight: 700;
       letter-spacing: .02em;
       cursor: progress;
       animation: call-btn-breathe 1.35s ease-in-out infinite;
     }
+    body.app-shell .btn-main.is-connecting {
+      background: var(--app-green);
+      box-shadow: 0 6px 16px rgba(16,163,127,.16);
+    }
+    body.app-shell .btn-main.is-ending {
+      background: #d64545;
+      box-shadow: 0 6px 16px rgba(196, 51, 51, .22);
+      animation-name: call-btn-breathe-red;
+    }
     @keyframes call-btn-breathe {
       0%, 100% { opacity: .78; box-shadow: 0 6px 14px rgba(16,163,127,.12); }
       50% { opacity: 1; box-shadow: 0 8px 20px rgba(16,163,127,.26); }
     }
+    @keyframes call-btn-breathe-red {
+      0%, 100% { opacity: .78; box-shadow: 0 6px 14px rgba(196, 51, 51, .12); }
+      50% { opacity: 1; box-shadow: 0 8px 20px rgba(196, 51, 51, .28); }
+    }
     @media (prefers-reduced-motion: reduce) {
-      body.app-shell .btn-main.is-connecting { animation: none; opacity: .88; }
+      body.app-shell .btn-main.is-connecting,
+      body.app-shell .btn-main.is-ending { animation: none; opacity: .88; }
       body.app-shell .btn-side,
       body.app-shell .btn-main { transition: none; }
     }
@@ -1755,9 +1768,6 @@
   var autoInterruptStartedAt = 0;
   var autoInterruptCooldownUntil = 0;
   var awaitingInterruptAck = false;
-  var interruptAckTimer = 0;
-  // Local mute of residual AI audio during barge-in. Must never stay latched
-  // across the next assistant turn (toggleSpeaker was an accidental escape hatch).
   var playbackSuppressed = false;
   var pendingVoicePreview = false;
   var suppressPreviewAssistantUntil = 0;
@@ -1898,6 +1908,8 @@
       subMic: '正在开启麦克风',
       subEstablishing: '正在建立通话',
       subEntering: '正在进入通话',
+      statusEnding: '结束中',
+      subEnding: '正在保存会话并释放连接',
       statusListening: '聆听中',
       subListening: '我在听，请说话',
       subContinue: '请继续说',
@@ -2060,6 +2072,8 @@
       subMic: 'Opening microphone',
       subEstablishing: 'Establishing call',
       subEntering: 'Joining call',
+      statusEnding: 'Ending',
+      subEnding: 'Saving session and releasing connection',
       statusListening: 'Listening',
       subListening: 'I am listening — please speak',
       subContinue: 'Keep going',
@@ -2901,7 +2915,7 @@
     var session = conversationSessions.find(function (item) { return item.id === id; });
     if (!session || !deleteConversationDialog) return;
     closeSessionContextMenu(false);
-    if (id === activeSessionId && (inCall || starting)) {
+    if (id === activeSessionId && (inCall || starting || stoppingCall)) {
       toast(t('sessionDeleteBusy'));
       return;
     }
@@ -3023,7 +3037,7 @@
   async function deleteConversationSession(id) {
     var session = conversationSessions.find(function (item) { return item.id === id; });
     if (!session) return;
-    if (id === activeSessionId && (inCall || starting)) {
+    if (id === activeSessionId && (inCall || starting || stoppingCall)) {
       toast(t('sessionDeleteBusy'));
       return;
     }
@@ -3109,7 +3123,7 @@
   }
 
   async function activateConversationSession(id) {
-    if (inCall || starting) {
+    if (inCall || starting || stoppingCall) {
       toast(t('toastSessionBusy'));
       return;
     }
@@ -3454,14 +3468,31 @@
   }
 
   function updateCallControls() {
+    // Transitional UI: connecting (start) and ending (hangup post-work) both lock the main button.
+    var ending = !!stoppingCall;
     // Keep "connecting" while SDP is in flight OR after SDP until the DataChannel opens.
-    var connecting = (!!starting && !inCall) || (!!inCall && !isDataChannelReady());
+    // startCall() awaits stopCall(false) while starting=true — keep the connecting label then.
+    var connecting = !ending && ((!!starting && !inCall) || (!!inCall && !isDataChannelReady()));
+    var transitional = ending || (!!connecting && !inCall);
+    var callLive = !!inCall && !ending;
     if (btnMain) {
-      btnMain.classList.toggle('is-idle', !inCall && !connecting);
-      btnMain.classList.toggle('is-connecting', connecting && !inCall);
-      btnMain.classList.toggle('is-live', !!inCall && isDataChannelReady());
-      btnMain.classList.toggle('stop', !!inCall);
-      if (connecting && !inCall) {
+      // startCall reuses stopCall(false): show green "连接中", not red "结束中".
+      var showEnding = ending && !starting;
+      btnMain.classList.toggle('is-idle', !callLive && !transitional);
+      btnMain.classList.toggle('is-connecting', (!!connecting && !inCall) || (ending && starting));
+      btnMain.classList.toggle('is-ending', showEnding);
+      btnMain.classList.toggle('is-live', callLive && isDataChannelReady());
+      btnMain.classList.toggle('stop', callLive || showEnding);
+      if (showEnding) {
+        // Hangup post-work (persist / title / release): red pill, same as end.
+        btnMain.textContent = t('statusEnding');
+        btnMain.setAttribute('title', t('statusEnding'));
+        btnMain.disabled = true;
+      } else if (ending && starting) {
+        btnMain.textContent = t('statusConnecting');
+        btnMain.setAttribute('title', t('statusConnecting'));
+        btnMain.disabled = true;
+      } else if (connecting && !inCall) {
         // Pre-SDP: cannot hang up yet (startCall still owns the flow).
         btnMain.textContent = t('statusConnecting');
         btnMain.setAttribute('title', t('statusConnecting'));
@@ -3480,19 +3511,19 @@
       }
     }
     if (btnMute) {
-      btnMute.disabled = !inCall;
-      btnMute.classList.toggle('is-live', inCall && !muted);
-      btnMute.classList.toggle('is-muted', inCall && muted);
+      btnMute.disabled = !callLive;
+      btnMute.classList.toggle('is-live', callLive && !muted);
+      btnMute.classList.toggle('is-muted', callLive && muted);
       btnMute.classList.toggle('muted', muted);
       btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false');
       btnMute.setAttribute('title', muted ? t('unmute') : t('mute'));
       btnMute.setAttribute('aria-label', muted ? t('unmute') : t('mute'));
     }
     if (btnSpeaker) {
-      btnSpeaker.disabled = !inCall;
-      btnSpeaker.classList.toggle('is-live', inCall && !speakerMuted);
-      btnSpeaker.classList.toggle('is-muted', inCall && speakerMuted);
-      btnSpeaker.setAttribute('aria-pressed', inCall && !speakerMuted ? 'true' : 'false');
+      btnSpeaker.disabled = !callLive;
+      btnSpeaker.classList.toggle('is-live', callLive && !speakerMuted);
+      btnSpeaker.classList.toggle('is-muted', callLive && speakerMuted);
+      btnSpeaker.setAttribute('aria-pressed', callLive && !speakerMuted ? 'true' : 'false');
       btnSpeaker.setAttribute('title', speakerMuted ? t('speakerOn') : t('speakerOff'));
       btnSpeaker.setAttribute('aria-label', speakerMuted ? t('speakerOn') : t('speakerOff'));
     }
@@ -3703,36 +3734,15 @@
     }
   }
 
-  function clearInterruptAckWait() {
-    awaitingInterruptAck = false;
-    if (interruptAckTimer) {
-      clearTimeout(interruptAckTimer);
-      interruptAckTimer = 0;
-    }
-  }
-
   function applyRemoteAudioOutput() {
     if (!remoteAudio) return;
-    // 用户关扬声器，或打断时的临时压制：增益归零；无图时再 mute 元素。
+    // 用户关扬声器时静音远端；打断不再本地 mute（见 interruptAssistant）。
     applyPlaybackGain();
     var silent = !inCall || speakerMuted || playbackSuppressed;
     if (!silent) ensureRemotePlay();
   }
 
-  function suppressRemotePlayback() {
-    playbackSuppressed = true;
-    applyPlaybackGain();
-    // Keep the element playing so Web Audio gain can unmute instantly on restore.
-    if (!remotePlaybackConnected) {
-      try { remoteAudio.pause(); } catch (e) {}
-    }
-    applyRemoteAudioOutput();
-  }
-
-  function restoreRemotePlayback() {
-    // Only act when barge-in mute is latched. Remote energy calls
-    // markAssistantSpeaking many times per second; re-entering ensureRemotePlay
-    // / setTargetAtTime on every tick makes AI speech stutter.
+  function clearPlaybackSuppress() {
     if (!playbackSuppressed) return;
     playbackSuppressed = false;
     applyRemoteAudioOutput();
@@ -3741,59 +3751,46 @@
   function toggleSpeaker() {
     if (!inCall) return;
     speakerMuted = !speakerMuted;
-    // 手动打开扬声器时，清掉打断留下的临时压制。
-    if (!speakerMuted) {
-      clearInterruptAckWait();
-      playbackSuppressed = false;
-    }
+    // Opening speaker also clears any residual suppress latch.
+    if (!speakerMuted) playbackSuppressed = false;
     applyRemoteAudioOutput();
     updateCallControls();
     toast(speakerMuted ? t('toastSpeakerMuted') : t('toastSpeakerUnmuted'));
   }
 
   function markAssistantSpeaking() {
-    if (!inCall) return;
-    // Assistant audio is active again (DC state or remote energy). End the
-    // barge-in mute cycle even if stop_speaking ack never arrived — otherwise
-    // playbackSuppressed stays true until the user toggles the speaker.
-    // clearInterruptAckWait is cheap; restore only when suppress is latched.
-    if (awaitingInterruptAck) clearInterruptAckWait();
+    if (!inCall || awaitingInterruptAck) return;
     assistantSpeaking = true;
-    if (playbackSuppressed) restoreRemotePlayback();
+    clearPlaybackSuppress();
   }
 
   function markAssistantListening() {
     assistantSpeaking = false;
     autoInterruptStartedAt = 0;
-    // Interrupt settle window ends on listening/idle. Keep residual AI audio
-    // muted until the next speaking signal; only clear the ack gate here.
-    clearInterruptAckWait();
+    if (awaitingInterruptAck) awaitingInterruptAck = false;
   }
 
-  function interruptAssistant() {
-    if (!inCall || muted || !assistantSpeaking || awaitingInterruptAck || !dcChannel || dcChannel.readyState !== 'open') return false;
+  // Voice barge-in (mic RMS) and text send share this path.
+  // options.requireUnmuted: default true for mic interrupt; false when sending text (mic may be muted).
+  function interruptAssistant(options) {
+    options = options || {};
+    var requireUnmuted = options.requireUnmuted !== false;
+    if (!inCall || !assistantSpeaking || awaitingInterruptAck || !dcChannel || dcChannel.readyState !== 'open') return false;
+    if (requireUnmuted && muted) return false;
     awaitingInterruptAck = true;
     assistantSpeaking = false;
     autoInterruptStartedAt = 0;
     autoInterruptCooldownUntil = Date.now() + AUTO_INTERRUPT_COOLDOWN_MS;
     remoteSpeakingUntil = 0;
-    suppressRemotePlayback();
-    if (interruptAckTimer) clearTimeout(interruptAckTimer);
-    // Upstream may omit listening/speaking state_update after stop_speaking.
-    // Drop the ack gate so remote energy / a later speaking signal can unmute.
-    interruptAckTimer = setTimeout(function () {
-      interruptAckTimer = 0;
-      if (!awaitingInterruptAck) return;
-      awaitingInterruptAck = false;
-    }, Math.max(AUTO_INTERRUPT_COOLDOWN_MS, 2500));
+    // Scheme A: do not locally mute AI on barge-in. Upstream stop_speaking owns
+    // stopping the voice track; local suppress was latching muted until speaker toggle.
     setUIKey('listening', 'statusListening', 'subInterrupted');
     try {
       sendDcEvent({ type: 'action_request', payload: { action: 'stop_speaking' } });
-      log('auto interrupt', 'stop_speaking');
+      log(requireUnmuted ? 'auto interrupt' : 'text interrupt', 'stop_speaking');
       return true;
     } catch (e) {
-      clearInterruptAckWait();
-      restoreRemotePlayback();
+      awaitingInterruptAck = false;
       throw e;
     }
   }
@@ -4302,6 +4299,11 @@
     updateComposerState();
     setUIKey('speaking', 'statusProcessing', 'subDcSubmit');
     try {
+      // Same barge-in as voice: stop current AI speech before the new user text lands.
+      // Mic may be muted while typing — do not require unmuted.
+      try { interruptAssistant({ requireUnmuted: false }); } catch (interruptErr) {
+        log('text interrupt fail', String(interruptErr && interruptErr.message || interruptErr));
+      }
       var message = buildBaseUserMessage({
         content_type: 'text',
         parts: [text]
@@ -4310,7 +4312,8 @@
       parentMessageId = message.id;
       textInput.value = '';
       autoResizeComposer();
-      rememberLocalMessage('user', text);
+      // Scheme 1: do not write user caption optimistically. Upstream chat_message_delta
+      // is the single source of truth, so AI-in-progress rows cannot split a double write.
       showReply(t('replyTextSent'), false);
       toast(t('toastTextSent'));
       log('dc relay text ok', message.id, text.slice(0, 120));
@@ -4460,10 +4463,7 @@
         } else {
           setWaveLevel('remote', rms);
           // Hold remote speaking state through short pauses in the assistant audio.
-          // Allow energy detection even while playback is suppressed, so a new
-          // assistant turn can clear the barge-in mute without toggling speaker.
-          // Still ignore energy during the short stop_speaking settle window.
-          if (inCall && !speakerMuted && !awaitingInterruptAck && rms > 0.08) {
+          if (inCall && !playbackSuppressed && !speakerMuted && rms > 0.08) {
             remoteSpeakingUntil = Date.now() + 900;
             markAssistantSpeaking();
             if (statusText.textContent !== t('statusSpeaking')) setUIKey('speaking', 'statusSpeaking', 'subSpeaking');
@@ -4521,7 +4521,6 @@
       if ((playbackSuppressed || speakerMuted) && !force) return;
       if (force) {
         speakerMuted = false;
-        clearInterruptAckWait();
         playbackSuppressed = false;
         updateCallControls();
       }
@@ -4530,15 +4529,9 @@
         if (!remotePlaybackConnected) {
           remoteAudio.muted = false;
           remoteAudio.volume = Math.min(1, Math.max(0, playbackVolume));
-        } else {
-          // Graph owns audible output; keep element playing so MediaStream stays hot.
-          remoteAudio.muted = false;
-          remoteAudio.volume = 0;
         }
-        if (remoteAudio.paused) {
-          var p = remoteAudio.play();
-          if (p && p.then) await p;
-        }
+        var p = remoteAudio.play();
+        if (p && p.then) await p;
       }
       var stream = remoteStream || remoteAudio.srcObject;
       if (stream) {
@@ -4547,8 +4540,6 @@
       } else {
         applyPlaybackGain();
       }
-      // Mobile browsers suspend AudioContext after backgrounding; resume is cheap.
-      if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
       log('remote playing', !remoteAudio.paused, 'graph=', remotePlaybackConnected, 'gain=', playbackVolume);
     } catch (e) {
       log('play fail', String(e));
@@ -4556,17 +4547,8 @@
     }
   }
 
-  // Recover playback after tab backgrounding without touching the hot energy path.
-  function onVisibilityPlaybackResume() {
-    if (document.visibilityState !== 'visible' || !inCall || speakerMuted || playbackSuppressed) return;
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume().catch(function () {});
-    }
-    ensureRemotePlay();
-  }
-
   async function startCall() {
-    if (starting || inCall) return;
+    if (starting || stoppingCall || inCall) return;
     starting = true;
     try {
       await stopVoicePreviewOnly();
@@ -4822,6 +4804,9 @@
     if (stoppingCall) return;
     stoppingCall = true;
     clearDisconnectWatch();
+    // Same lock pattern as "连接中": show status immediately and ignore further main-button clicks.
+    if (updateText) setUIKey('connecting', 'statusEnding', 'subEnding');
+    updateCallControls();
     try {
       clearInterval(0);
       if (localRaf) cancelAnimationFrame(localRaf);
@@ -4853,7 +4838,7 @@
       autoInterruptCalibrationEndsAt = 0;
       autoInterruptCalibrationSamples = [];
       autoInterruptAmbientRms = 0;
-      clearInterruptAckWait();
+      awaitingInterruptAck = false;
       playbackSuppressed = false;
       streamingCaptionRole = '';
       streamingCaptionText = '';
@@ -4862,6 +4847,8 @@
         remoteAudio.muted = false;
         remoteAudio.volume = Math.min(1, Math.max(0, playbackVolume));
       }
+      // Keep ending UI while post-hangup network work runs (title + release).
+      updateCallControls();
       // Persist sticky ids, then pull upstream title once if not user-locked.
       // Local title was the first user utterance during the call.
       try { ensureUpstreamIdsForHangup(); } catch (e) {}
@@ -4873,12 +4860,12 @@
       // local conversation rows on the next dial.
       // "New chat" still clears local ids via createConversationSession().
       try { await releaseBackendVoiceSession(true); } catch (e) {}
-      updateCallControls();
       if (updateText) setUIKey('idle', 'statusReady', 'subReady');
       updateTranscriptMeta();
       updateComposerState();
     } finally {
       stoppingCall = false;
+      updateCallControls();
     }
   }
 
@@ -4927,7 +4914,7 @@
       };
     }
     if (btnNewSession) btnNewSession.onclick = async function () {
-      if (inCall || starting) { toast(t('toastSessionBusy')); return; }
+      if (inCall || starting || stoppingCall) { toast(t('toastSessionBusy')); return; }
       if (!currentSessionHistory.length && !currentTranscript.length) { setSessionsOpen(false); return; }
       try {
         await createConversationSession();
@@ -5077,7 +5064,9 @@
     }
 
     btnMain.onclick = function () {
-      if (inCall || starting) stopCall(true);
+      // connecting / ending: button is disabled; still no-op if a click races through.
+      if (stoppingCall || starting) return;
+      if (inCall) stopCall(true);
       else startCall();
     };
     btnMute.onclick = toggleMute;
@@ -5112,7 +5101,6 @@
     updateTranscriptMeta();
     window.addEventListener('pagehide', releaseOnPageExit);
     window.addEventListener('beforeunload', releaseOnPageExit);
-    document.addEventListener('visibilitychange', onVisibilityPlaybackResume);
     btnLogout.onclick = async function () {
       try {
         await stopCall(false);
