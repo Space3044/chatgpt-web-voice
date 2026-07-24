@@ -19,6 +19,16 @@
 - 下游 `/v1` 接入：只持 API Key + `voice_session_id` 即可建连 / 恢复
 - 粘性账号与上游续聊线索由网关持久化，不向下游暴露池内账号信息
 
+## 网页效果
+
+![image-20260724144852569](./README.assets/image-20260724144852569.png)
+
+![image-20260724145018657](./README.assets/image-20260724145018657.png)
+
+![image-20260724145053752](./README.assets/image-20260724145053752.png)
+
+![image-20260724145221134](./README.assets/image-20260724145221134.png)
+
 ## 本地启动
 
 需要 Go 1.22+。
