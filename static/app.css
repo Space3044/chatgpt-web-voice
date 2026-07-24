@@ -508,7 +508,7 @@ th {
   font-weight: 700;
   letter-spacing: .07em;
   text-transform: uppercase;
-  text-align: left;
+  text-align: center;
   white-space: nowrap;
   vertical-align: middle;
 }
@@ -543,14 +543,21 @@ tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: var(--row-hover); }
 tbody tr.disabled { opacity: .72; }
 
+/* Admin table headers are always centered */
+table.accounts-table thead th,
+table.sessions-table thead th,
+table.keys-table thead th {
+  text-align: center;
+}
+
 /* Column widths — accounts */
 table.accounts-table th.col-account { width: 18%; }
 table.accounts-table th.col-token { width: 15%; }
 table.accounts-table th.col-route { width: 15%; }
-table.accounts-table th.col-status { width: 10%; text-align: center; }
-table.accounts-table th.col-expiry { width: 12%; text-align: center; }
-table.accounts-table th.col-used { width: 12%; text-align: center; }
-table.accounts-table th.col-actions { width: 18%; text-align: center; }
+table.accounts-table th.col-status { width: 10%; }
+table.accounts-table th.col-expiry { width: 12%; }
+table.accounts-table th.col-used { width: 12%; }
+table.accounts-table th.col-actions { width: 18%; }
 table.accounts-table td:nth-child(4),
 table.accounts-table td:nth-child(5),
 table.accounts-table td:nth-child(6),
@@ -562,10 +569,12 @@ table.accounts-table td:nth-child(6) .cell-stack { justify-items: center; }
 /* Column widths — sessions */
 table.sessions-table th.col-id { width: 14%; }
 table.sessions-table th.col-caller { width: 11%; }
+table.sessions-table th.col-status { width: 9%; }
 table.sessions-table th.col-account { width: 16%; }
 table.sessions-table th.col-upstream { width: 15%; }
 table.sessions-table th.col-voice { width: 12%; }
-table.sessions-table th.col-time { width: 13%; text-align: center; }
+table.sessions-table th.col-time { width: 13%; }
+table.sessions-table th.col-actions { width: 9%; }
 table.sessions-table td:nth-child(3),
 table.sessions-table td:nth-child(7),
 table.sessions-table td:nth-child(8) { text-align: center; }
@@ -573,27 +582,15 @@ table.sessions-table td:nth-child(8) { text-align: center; }
 /* Keys table proportional columns */
 table.keys-table th:nth-child(1) { width: 22%; }
 table.keys-table th:nth-child(2) { width: 20%; }
-table.keys-table th:nth-child(3) { width: 12%; text-align: center; }
+table.keys-table th:nth-child(3) { width: 12%; }
 table.keys-table th:nth-child(4),
-table.keys-table th:nth-child(5) { width: 15%; text-align: center; }
-table.keys-table th:nth-child(6) { width: 16%; text-align: center; }
+table.keys-table th:nth-child(5) { width: 15%; }
+table.keys-table th:nth-child(6) { width: 16%; }
 
 table.keys-table td:nth-child(3),
 table.keys-table td:nth-child(4),
 table.keys-table td:nth-child(5),
 table.keys-table td:nth-child(6) { text-align: center; }
-
-/* Sessions named columns */
-table.sessions-table th.col-id,
-table.sessions-table th.col-caller,
-table.sessions-table th.col-account,
-table.sessions-table th.col-upstream,
-table.sessions-table th.col-voice { text-align: left; }
-table.sessions-table th.col-status,
-table.sessions-table th.col-time,
-table.sessions-table th.col-actions { text-align: center; }
-table.sessions-table th.col-status { width: 9%; }
-table.sessions-table th.col-actions { width: 9%; }
 
 .cell-stack {
   display: grid;
